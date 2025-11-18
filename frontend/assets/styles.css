@@ -1,0 +1,60 @@
+body {
+  background: #f7f7f7;
+}
+
+section[data-tab-panel] {
+  margin-top: 2rem;
+}
+
+section[data-tab-panel].u-hide {
+  display: none;
+}
+
+#products-panel {
+  margin-top: 1.5rem;
+}
+
+#notification {
+  margin-top: 1rem;
+}
+
+#notification.u-hide {
+  display: none;
+}
+
+.form-row {
+  margin-bottom: 1rem;
+  row-gap: 1rem;
+}
+
+.form-row:last-of-type {
+  margin-bottom: 0;
+}
+
+.p-table table {
+  min-width: 100%;
+}
+
+.p-card__content {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.p-button-group {
+  display: flex;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.p-form__group fieldset,
+fieldset.p-form__group {
+  border: 1px solid #e0e0e0;
+  padding: 1rem;
+  border-radius: 4px;
+}
+
+.p-form__group fieldset legend,
+fieldset.p-form__group legend {
+  font-weight: 600;
+}

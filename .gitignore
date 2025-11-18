@@ -1,0 +1,33 @@
+data/
+# Python caches
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Environment files
+.env
+.env.*
+
+# Tooling caches
+.pytest_cache/
+.mypy_cache/
+coverage.xml
+htmlcov/
+
+# Editors and IDEs
+.vscode/
+.idea/
+
+# Node/Frontend build artifacts
+node_modules/
+dist/
+*.log
+
+# OS files
+.DS_Store
+Thumbs.db
