@@ -4,35 +4,15 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>MAAS Custom Simplestream Server</title>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://assets.ubuntu.com/v1/vanilla-framework-version-4.18.0.min.css">
     <style>
-        body {
-            background-color: #f8f9fa;
-        }
-        .header {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        .p-strip--header {
+            background: linear-gradient(135deg, #E95420 0%, #772953 100%);
             color: white;
-            padding: 2rem 0;
-            margin-bottom: 2rem;
-        }
-        .card {
-            margin-bottom: 1.5rem;
-            box-shadow: 0 0.125rem 0.25rem rgba(0,0,0,0.075);
         }
         .table-container {
             max-height: 500px;
             overflow-y: auto;
-        }
-        .spinner-border-sm {
-            width: 1rem;
-            height: 1rem;
-        }
-        .badge-custom {
-            padding: 0.35rem 0.65rem;
-        }
-        .form-label {
-            font-weight: 500;
         }
         .alert-fixed {
             position: fixed;
@@ -41,248 +21,272 @@
             z-index: 1050;
             min-width: 300px;
         }
+        .u-hide {
+            display: none;
+        }
     </style>
 </head>
 <body>
     <!-- Header -->
-    <div class="header">
-        <div class="container">
-            <h1><i class="bi bi-cloud-arrow-down"></i> MAAS Custom Simplestream Server</h1>
-            <p class="lead mb-0">Manage and serve custom MAAS images via simplestream</p>
+    <div class="p-strip--header">
+        <div class="row">
+            <div class="col-12">
+                <h1>MAAS Custom Simplestream Server</h1>
+                <p class="p-heading--5">Manage and serve custom MAAS images via simplestream</p>
+            </div>
         </div>
     </div>
 
     <!-- Alerts Container -->
     <div id="alertsContainer"></div>
 
-    <div class="container">
-        <!-- Tabs -->
-        <ul class="nav nav-tabs mb-4" id="mainTabs" role="tablist">
-            <li class="nav-item" role="presentation">
-                <button class="nav-link active" id="upstream-tab" data-bs-toggle="tab" data-bs-target="#upstream" type="button" role="tab">
-                    <i class="bi bi-cloud-download"></i> Upstream Mirror
-                </button>
-            </li>
-            <li class="nav-item" role="presentation">
-                <button class="nav-link" id="upload-tab" data-bs-toggle="tab" data-bs-target="#upload" type="button" role="tab">
-                    <i class="bi bi-cloud-upload"></i> Upload Images
-                </button>
-            </li>
-            <li class="nav-item" role="presentation">
-                <button class="nav-link" id="images-tab" data-bs-toggle="tab" data-bs-target="#images" type="button" role="tab">
-                    <i class="bi bi-images"></i> Uploaded Images
-                </button>
-            </li>
-            <li class="nav-item" role="presentation">
-                <button class="nav-link" id="stream-tab" data-bs-toggle="tab" data-bs-target="#stream" type="button" role="tab">
-                    <i class="bi bi-link-45deg"></i> Simplestream URLs
-                </button>
-            </li>
-        </ul>
-
-        <div class="tab-content" id="mainTabContent">
-            <!-- Upstream Mirror Tab -->
-            <div class="tab-pane fade show active" id="upstream" role="tabpanel">
-                <div class="card">
-                    <div class="card-header bg-primary text-white">
-                        <h5 class="mb-0"><i class="bi bi-server"></i> Fetch from Upstream Mirror</h5>
-                    </div>
-                    <div class="card-body">
-                        <form id="upstreamForm">
-                            <div class="row">
-                                <div class="col-md-10">
-                                    <label for="upstreamUrl" class="form-label">Upstream Mirror URL</label>
-                                    <input type="url" class="form-control" id="upstreamUrl" 
-                                           value="https://images.maas.io/ephemeral-v3/stable/streams/v1/index.json"
-                                           placeholder="https://images.maas.io/ephemeral-v3/stable/streams/v1/index.json" required>
-                                    <div class="form-text">Enter the URL to the simplestream index.json file</div>
-                                </div>
-                                <div class="col-md-2 d-flex align-items-end">
-                                    <button type="submit" class="btn btn-primary w-100" id="fetchBtn">
-                                        <i class="bi bi-search"></i> Fetch
-                                    </button>
-                                </div>
-                            </div>
-                        </form>
-                    </div>
-                </div>
-
-                <div id="upstreamResults" style="display: none;">
-                    <div class="card">
-                        <div class="card-header d-flex justify-content-between align-items-center">
-                            <h5 class="mb-0"><i class="bi bi-list-check"></i> Available Images</h5>
-                            <div>
-                                <button class="btn btn-sm btn-success" id="mirrorSelectedBtn" disabled>
-                                    <i class="bi bi-download"></i> Mirror Selected
-                                </button>
-                                <button class="btn btn-sm btn-secondary" id="selectAllBtn">
-                                    <i class="bi bi-check-all"></i> Select All
-                                </button>
-                                <button class="btn btn-sm btn-secondary" id="deselectAllBtn">
-                                    <i class="bi bi-x-circle"></i> Deselect All
-                                </button>
-                            </div>
-                        </div>
-                        <div class="card-body">
-                            <div class="mb-3">
-                                <input type="text" class="form-control" id="searchImages" placeholder="Search images...">
-                            </div>
-                            <div class="table-container">
-                                <table class="table table-hover table-sm">
-                                    <thead class="table-light sticky-top">
-                                        <tr>
-                                            <th><input type="checkbox" id="selectAllCheckbox"></th>
-                                            <th>OS</th>
-                                            <th>Release</th>
-                                            <th>Arch</th>
-                                            <th>Version</th>
-                                            <th>Type</th>
-                                            <th>Size</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody id="upstreamImagesTable">
-                                    </tbody>
-                                </table>
-                            </div>
-                            <div id="imageCount" class="mt-2 text-muted"></div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Upload Images Tab -->
-            <div class="tab-pane fade" id="upload" role="tabpanel">
-                <div class="card">
-                    <div class="card-header bg-success text-white">
-                        <h5 class="mb-0"><i class="bi bi-upload"></i> Upload Custom Images</h5>
-                    </div>
-                    <div class="card-body">
-                        <form id="uploadForm" enctype="multipart/form-data">
-                            <div class="row mb-3">
-                                <div class="col-md-6">
-                                    <label for="arch" class="form-label">Architecture *</label>
-                                    <select class="form-select" id="arch" required>
-                                        <option value="">Select architecture...</option>
-                                        <option value="amd64">amd64</option>
-                                        <option value="arm64">arm64</option>
-                                        <option value="i386">i386</option>
-                                        <option value="ppc64el">ppc64el</option>
-                                        <option value="s390x">s390x</option>
-                                    </select>
-                                </div>
-                                <div class="col-md-6">
-                                    <label for="os" class="form-label">Operating System *</label>
-                                    <input type="text" class="form-control" id="os" value="ubuntu" required>
-                                </div>
-                            </div>
-                            <div class="row mb-3">
-                                <div class="col-md-6">
-                                    <label for="release" class="form-label">Release *</label>
-                                    <input type="text" class="form-control" id="release" placeholder="e.g., focal, jammy" required>
-                                </div>
-                                <div class="col-md-6">
-                                    <label for="version" class="form-label">Version *</label>
-                                    <input type="text" class="form-control" id="version" placeholder="e.g., 20241118" required>
-                                </div>
-                            </div>
-                            <div class="mb-3">
-                                <label for="label" class="form-label">Label *</label>
-                                <input type="text" class="form-control" id="label" placeholder="e.g., custom" required>
-                            </div>
-                            
-                            <hr class="my-4">
-                            <h6>Upload Files (at least one required)</h6>
-                            
-                            <div class="mb-3">
-                                <label for="kernel" class="form-label">Kernel</label>
-                                <input type="file" class="form-control" id="kernel">
-                                <div class="form-text">Kernel image file</div>
-                            </div>
-                            <div class="mb-3">
-                                <label for="initrd" class="form-label">Initrd</label>
-                                <input type="file" class="form-control" id="initrd">
-                                <div class="form-text">Initial ramdisk file</div>
-                            </div>
-                            <div class="mb-3">
-                                <label for="rootfs" class="form-label">Root Filesystem</label>
-                                <input type="file" class="form-control" id="rootfs">
-                                <div class="form-text">Root filesystem image (squashfs, ext4, etc.)</div>
-                            </div>
-                            
-                            <button type="submit" class="btn btn-success btn-lg w-100" id="uploadBtn">
-                                <i class="bi bi-cloud-upload"></i> Upload Images
-                            </button>
-                        </form>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Uploaded Images Tab -->
-            <div class="tab-pane fade" id="images" role="tabpanel">
-                <div class="card">
-                    <div class="card-header d-flex justify-content-between align-items-center">
-                        <h5 class="mb-0"><i class="bi bi-images"></i> Uploaded Images</h5>
-                        <button class="btn btn-sm btn-primary" id="refreshImagesBtn">
-                            <i class="bi bi-arrow-clockwise"></i> Refresh
+    <div class="row">
+        <div class="col-12">
+            <!-- Tabs -->
+            <div class="p-tabs">
+                <div class="p-tabs__list" role="tablist">
+                    <div class="p-tabs__item">
+                        <button class="p-tabs__link" role="tab" aria-selected="true" aria-controls="upstream-tab" id="upstream">
+                            Upstream Mirror
                         </button>
                     </div>
-                    <div class="card-body">
-                        <div id="uploadedImagesContainer">
-                            <div class="text-center text-muted py-5">
-                                <i class="bi bi-image" style="font-size: 3rem;"></i>
-                                <p class="mt-2">Loading images...</p>
+                    <div class="p-tabs__item">
+                        <button class="p-tabs__link" role="tab" aria-selected="false" aria-controls="upload-tab" id="upload" tabindex="-1">
+                            Upload Images
+                        </button>
+                    </div>
+                    <div class="p-tabs__item">
+                        <button class="p-tabs__link" role="tab" aria-selected="false" aria-controls="images-tab" id="images" tabindex="-1">
+                            Uploaded Images
+                        </button>
+                    </div>
+                    <div class="p-tabs__item">
+                        <button class="p-tabs__link" role="tab" aria-selected="false" aria-controls="stream-tab" id="stream" tabindex="-1">
+                            Simplestream URLs
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Upstream Mirror Tab -->
+                <div tabindex="0" role="tabpanel" id="upstream-tab" aria-labelledby="upstream">
+                    <div class="p-card">
+                        <h3 class="p-card__title">Fetch from Upstream Mirror</h3>
+                        <div class="p-card__content">
+                            <form id="upstreamForm">
+                                <div class="row">
+                                    <div class="col-10">
+                                        <label for="upstreamUrl">Upstream Mirror URL</label>
+                                        <input type="url" id="upstreamUrl" 
+                                               value="https://images.maas.io/ephemeral-v3/stable/streams/v1/index.json"
+                                               placeholder="https://images.maas.io/ephemeral-v3/stable/streams/v1/index.json" required>
+                                        <p class="p-form-help-text">Enter the URL to the simplestream index.json file</p>
+                                    </div>
+                                    <div class="col-2">
+                                        <label>&nbsp;</label>
+                                        <button type="submit" class="p-button--positive u-full-width" id="fetchBtn">Fetch</button>
+                                    </div>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+
+                    <div id="upstreamResults" class="u-hide">
+                        <div class="p-card">
+                            <div class="p-card__header">
+                                <h3 class="p-card__title">Available Images</h3>
+                                <div class="p-card__title-actions">
+                                    <button class="p-button--positive is-small" id="mirrorSelectedBtn" disabled>Mirror Selected</button>
+                                    <button class="p-button is-small" id="selectAllBtn">Select All</button>
+                                    <button class="p-button is-small" id="deselectAllBtn">Deselect All</button>
+                                </div>
+                            </div>
+                            <div class="p-card__content">
+                                <div class="p-form__group">
+                                    <input type="text" id="searchImages" placeholder="Search images..." class="u-full-width">
+                                </div>
+                                <div class="table-container">
+                                    <table aria-label="Available images table">
+                                        <thead>
+                                            <tr>
+                                                <th><input type="checkbox" id="selectAllCheckbox"></th>
+                                                <th>OS</th>
+                                                <th>Release</th>
+                                                <th>Arch</th>
+                                                <th>Version</th>
+                                                <th>Type</th>
+                                                <th>Size</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="upstreamImagesTable">
+                                        </tbody>
+                                    </table>
+                                </div>
+                                <div id="imageCount" class="u-text--muted u-sv2"></div>
                             </div>
                         </div>
                     </div>
                 </div>
-            </div>
 
-            <!-- Simplestream URLs Tab -->
-            <div class="tab-pane fade" id="stream" role="tabpanel">
-                <div class="card">
-                    <div class="card-header bg-info text-white">
-                        <h5 class="mb-0"><i class="bi bi-link-45deg"></i> Simplestream URLs</h5>
+                <!-- Upload Images Tab -->
+                <div tabindex="0" role="tabpanel" id="upload-tab" aria-labelledby="upload" hidden>
+                    <div class="p-card">
+                        <h3 class="p-card__title">Upload Custom Images</h3>
+                        <div class="p-card__content">
+                            <form id="uploadForm" enctype="multipart/form-data">
+                                <div class="row">
+                                    <div class="col-6">
+                                        <label for="arch">Architecture *</label>
+                                        <select id="arch" required>
+                                            <option value="">Select architecture...</option>
+                                            <option value="amd64">amd64</option>
+                                            <option value="arm64">arm64</option>
+                                            <option value="i386">i386</option>
+                                            <option value="ppc64el">ppc64el</option>
+                                            <option value="s390x">s390x</option>
+                                        </select>
+                                    </div>
+                                    <div class="col-6">
+                                        <label for="os">Operating System *</label>
+                                        <input type="text" id="os" value="ubuntu" required>
+                                    </div>
+                                </div>
+                                <div class="row">
+                                    <div class="col-6">
+                                        <label for="release">Release *</label>
+                                        <input type="text" id="release" placeholder="e.g., focal, jammy" required>
+                                    </div>
+                                    <div class="col-6">
+                                        <label for="version">Version *</label>
+                                        <input type="text" id="version" placeholder="e.g., 20241118" required>
+                                    </div>
+                                </div>
+                                <div class="p-form__group">
+                                    <label for="label">Label *</label>
+                                    <input type="text" id="label" placeholder="e.g., custom" required>
+                                </div>
+                                
+                                <hr class="u-sv3">
+                                <h4>Upload Files (at least one required)</h4>
+                                
+                                <div class="p-form__group">
+                                    <label for="kernel">Kernel</label>
+                                    <input type="file" id="kernel">
+                                    <p class="p-form-help-text">Kernel image file</p>
+                                </div>
+                                <div class="p-form__group">
+                                    <label for="initrd">Initrd</label>
+                                    <input type="file" id="initrd">
+                                    <p class="p-form-help-text">Initial ramdisk file</p>
+                                </div>
+                                <div class="p-form__group">
+                                    <label for="rootfs">Root Filesystem</label>
+                                    <input type="file" id="rootfs">
+                                    <p class="p-form-help-text">Root filesystem image (squashfs, ext4, etc.)</p>
+                                </div>
+                                
+                                <button type="submit" class="p-button--positive u-full-width" id="uploadBtn">Upload Images</button>
+                            </form>
+                        </div>
                     </div>
-                    <div class="card-body">
-                        <p>Use these URLs to configure MAAS to use this custom simplestream server:</p>
-                        
-                        <div class="alert alert-info">
-                            <h6><i class="bi bi-info-circle"></i> Index URL</h6>
-                            <div class="input-group">
-                                <input type="text" class="form-control" id="indexUrl" readonly>
-                                <button class="btn btn-outline-secondary" onclick="copyToClipboard('indexUrl')">
-                                    <i class="bi bi-clipboard"></i> Copy
-                                </button>
-                            </div>
-                            <small class="text-muted">Use this URL in MAAS boot source configuration</small>
-                        </div>
+                </div>
 
-                        <div class="alert alert-secondary">
-                            <h6><i class="bi bi-file-earmark-code"></i> Products URL</h6>
-                            <div class="input-group">
-                                <input type="text" class="form-control" id="productsUrl" readonly>
-                                <button class="btn btn-outline-secondary" onclick="copyToClipboard('productsUrl')">
-                                    <i class="bi bi-clipboard"></i> Copy
-                                </button>
+                <!-- Uploaded Images Tab -->
+                <div tabindex="0" role="tabpanel" id="images-tab" aria-labelledby="images" hidden>
+                    <div class="p-card">
+                        <div class="p-card__header">
+                            <h3 class="p-card__title">Uploaded Images</h3>
+                            <div class="p-card__title-actions">
+                                <button class="p-button is-small" id="refreshImagesBtn">Refresh</button>
                             </div>
                         </div>
+                        <div class="p-card__content">
+                            <div id="uploadedImagesContainer">
+                                <div class="u-align--center u-sv3">
+                                    <p class="u-text--muted">Loading images...</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
 
-                        <hr>
-                        <h6>Example MAAS Configuration</h6>
-                        <pre class="bg-light p-3 rounded"><code>maas admin boot-sources create \
+                <!-- Simplestream URLs Tab -->
+                <div tabindex="0" role="tabpanel" id="stream-tab" aria-labelledby="stream" hidden>
+                    <div class="p-card">
+                        <h3 class="p-card__title">Simplestream URLs</h3>
+                        <div class="p-card__content">
+                            <p>Use these URLs to configure MAAS to use this custom simplestream server:</p>
+                            
+                            <div class="p-notification--information">
+                                <div class="p-notification__content">
+                                    <h5 class="p-notification__title">Index URL</h5>
+                                    <div class="row">
+                                        <div class="col-10">
+                                            <input type="text" id="indexUrl" readonly>
+                                        </div>
+                                        <div class="col-2">
+                                            <button class="p-button u-full-width" onclick="copyToClipboard('indexUrl')">Copy</button>
+                                        </div>
+                                    </div>
+                                    <p class="p-form-help-text">Use this URL in MAAS boot source configuration</p>
+                                </div>
+                            </div>
+
+                            <div class="p-notification">
+                                <div class="p-notification__content">
+                                    <h5 class="p-notification__title">Products URL</h5>
+                                    <div class="row">
+                                        <div class="col-10">
+                                            <input type="text" id="productsUrl" readonly>
+                                        </div>
+                                        <div class="col-2">
+                                            <button class="p-button u-full-width" onclick="copyToClipboard('productsUrl')">Copy</button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <hr>
+                            <h4>Example MAAS Configuration</h4>
+                            <pre><code>maas admin boot-sources create \
     url=<span id="indexUrlExample"></span> \
     keyring_filename="" \
     keyring_data=""</code></pre>
+                        </div>
                     </div>
                 </div>
             </div>
         </div>
     </div>
 
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://assets.ubuntu.com/v1/vanilla-framework-version-4.18.0.min.js"></script>
     <script>
         let upstreamData = [];
         let filteredData = [];
+
+        // Initialize tabs
+        const tabs = document.querySelectorAll('[role="tab"]');
+        const tabPanels = document.querySelectorAll('[role="tabpanel"]');
+
+        tabs.forEach(tab => {
+            tab.addEventListener('click', e => {
+                e.preventDefault();
+                const target = tab.getAttribute('aria-controls');
+                
+                // Update tabs
+                tabs.forEach(t => {
+                    t.setAttribute('aria-selected', 'false');
+                    t.setAttribute('tabindex', '-1');
+                });
+                tab.setAttribute('aria-selected', 'true');
+                tab.removeAttribute('tabindex');
+                
+                // Update panels
+                tabPanels.forEach(panel => {
+                    panel.hidden = true;
+                });
+                document.getElementById(target).hidden = false;
+            });
+        });
 
         // Initialize
         document.addEventListener('DOMContentLoaded', function() {
@@ -295,14 +299,23 @@
         });
 
         // Show alert
-        function showAlert(message, type = 'success') {
+        function showAlert(message, type = 'positive') {
             const alertDiv = document.createElement('div');
-            alertDiv.className = `alert alert-${type} alert-dismissible fade show alert-fixed`;
+            const typeClass = type === 'positive' ? 'p-notification--positive' : 
+                             type === 'negative' ? 'p-notification--negative' : 
+                             'p-notification--information';
+            alertDiv.className = `${typeClass} alert-fixed`;
             alertDiv.innerHTML = `
-                ${message}
-                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                <div class="p-notification__content">
+                    <p class="p-notification__message">${message}</p>
+                    <button class="p-notification__close" aria-label="Close notification">Close</button>
+                </div>
             `;
             document.getElementById('alertsContainer').appendChild(alertDiv);
+            
+            alertDiv.querySelector('.p-notification__close').addEventListener('click', () => {
+                alertDiv.remove();
+            });
             
             setTimeout(() => {
                 alertDiv.remove();
@@ -314,7 +327,7 @@
             const element = document.getElementById(elementId);
             element.select();
             document.execCommand('copy');
-            showAlert('Copied to clipboard!', 'info');
+            showAlert('Copied to clipboard!', 'information');
         }
 
         // Fetch upstream images
@@ -325,7 +338,7 @@
             const fetchBtn = document.getElementById('fetchBtn');
             
             fetchBtn.disabled = true;
-            fetchBtn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Fetching...';
+            fetchBtn.innerHTML = '<i class="p-icon--spinner u-animation--spin"></i> Fetching...';
             
             try {
                 const response = await fetch('/api/upstream/fetch', {
@@ -346,14 +359,14 @@
                 filteredData = upstreamData;
                 
                 displayUpstreamImages(filteredData);
-                document.getElementById('upstreamResults').style.display = 'block';
-                showAlert(`Successfully fetched ${upstreamData.length} images`, 'success');
+                document.getElementById('upstreamResults').classList.remove('u-hide');
+                showAlert(`Successfully fetched ${upstreamData.length} images`, 'positive');
                 
             } catch (error) {
-                showAlert(`Error: ${error.message}`, 'danger');
+                showAlert(`Error: ${error.message}`, 'negative');
             } finally {
                 fetchBtn.disabled = false;
-                fetchBtn.innerHTML = '<i class="bi bi-search"></i> Fetch';
+                fetchBtn.innerHTML = 'Fetch';
             }
         });
 
@@ -370,7 +383,7 @@
                     <td>${img.product_release}</td>
                     <td>${img.product_arch}</td>
                     <td><small>${img.version_name}</small></td>
-                    <td><span class="badge bg-secondary badge-custom">${img.item_ftype}</span></td>
+                    <td><span class="p-label--new">${img.item_ftype}</span></td>
                     <td>${formatBytes(img.item_size)}</td>
                 `;
             });
@@ -453,10 +466,10 @@
                 });
                 
                 const data = await response.json();
-                showAlert(data.message, 'info');
+                showAlert(data.message, 'information');
                 
             } catch (error) {
-                showAlert(`Error: ${error.message}`, 'danger');
+                showAlert(`Error: ${error.message}`, 'negative');
             }
         });
 
@@ -476,7 +489,7 @@
             const rootfs = document.getElementById('rootfs').files[0];
             
             if (!kernel && !initrd && !rootfs) {
-                showAlert('Please select at least one file to upload', 'warning');
+                showAlert('Please select at least one file to upload', 'negative');
                 return;
             }
             
@@ -486,7 +499,7 @@
             
             const uploadBtn = document.getElementById('uploadBtn');
             uploadBtn.disabled = true;
-            uploadBtn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Uploading...';
+            uploadBtn.innerHTML = '<i class="p-icon--spinner u-animation--spin"></i> Uploading...';
             
             try {
                 const response = await fetch('/api/images/upload', {
@@ -500,26 +513,25 @@
                 }
                 
                 const data = await response.json();
-                showAlert('Images uploaded successfully!', 'success');
+                showAlert('Images uploaded successfully!', 'positive');
                 document.getElementById('uploadForm').reset();
                 
-                // Switch to uploaded images tab and refresh
-                const imagesTab = new bootstrap.Tab(document.getElementById('images-tab'));
-                imagesTab.show();
+                // Switch to uploaded images tab
+                document.getElementById('images').click();
                 loadUploadedImages();
                 
             } catch (error) {
-                showAlert(`Error: ${error.message}`, 'danger');
+                showAlert(`Error: ${error.message}`, 'negative');
             } finally {
                 uploadBtn.disabled = false;
-                uploadBtn.innerHTML = '<i class="bi bi-cloud-upload"></i> Upload Images';
+                uploadBtn.innerHTML = 'Upload Images';
             }
         });
 
         // Load uploaded images
         async function loadUploadedImages() {
             const container = document.getElementById('uploadedImagesContainer');
-            container.innerHTML = '<div class="text-center"><span class="spinner-border"></span> Loading...</div>';
+            container.innerHTML = '<div class="u-align--center"><i class="p-icon--spinner u-animation--spin"></i> Loading...</div>';
             
             try {
                 const response = await fetch('/api/images/list');
@@ -527,9 +539,8 @@
                 
                 if (data.images.length === 0) {
                     container.innerHTML = `
-                        <div class="text-center text-muted py-5">
-                            <i class="bi bi-inbox" style="font-size: 3rem;"></i>
-                            <p class="mt-2">No images uploaded yet</p>
+                        <div class="u-align--center u-sv3">
+                            <p class="u-text--muted">No images uploaded yet</p>
                         </div>
                     `;
                     return;
@@ -538,29 +549,29 @@
                 container.innerHTML = '';
                 data.images.forEach(img => {
                     const card = document.createElement('div');
-                    card.className = 'card mb-3';
+                    card.className = 'p-card u-sv2';
                     
                     const filesList = Object.entries(img.files).map(([type, file]) => `
                         <li><strong>${type}:</strong> ${file.filename} 
-                            <span class="badge bg-info">${formatBytes(file.size)}</span>
+                            <span class="p-label">${formatBytes(file.size)}</span>
                         </li>
                     `).join('');
                     
                     card.innerHTML = `
-                        <div class="card-body">
+                        <div class="p-card__content">
                             <div class="row">
-                                <div class="col-md-8">
-                                    <h5 class="card-title">${img.os} ${img.release} (${img.arch})</h5>
-                                    <p class="card-text">
+                                <div class="col-8">
+                                    <h4>${img.os} ${img.release} (${img.arch})</h4>
+                                    <p>
                                         <strong>Version:</strong> ${img.version}<br>
                                         <strong>Label:</strong> ${img.label}<br>
                                         <strong>Upload ID:</strong> <code>${img.upload_id}</code><br>
                                         <strong>Uploaded:</strong> ${new Date(img.uploaded_at).toLocaleString()}
                                     </p>
                                 </div>
-                                <div class="col-md-4">
-                                    <h6>Files:</h6>
-                                    <ul class="list-unstyled">
+                                <div class="col-4">
+                                    <h5>Files:</h5>
+                                    <ul class="p-list">
                                         ${filesList}
                                     </ul>
                                 </div>
@@ -572,7 +583,7 @@
                 });
                 
             } catch (error) {
-                container.innerHTML = `<div class="alert alert-danger">Error loading images: ${error.message}</div>`;
+                container.innerHTML = `<div class="p-notification--negative"><div class="p-notification__content"><p class="p-notification__message">Error loading images: ${error.message}</p></div></div>`;
             }
         }
 
