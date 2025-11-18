@@ -15,7 +15,8 @@ import aiofiles
 app = FastAPI(title="MAAS Custom Simplestream Server")
 
 # Configuration
-UPLOAD_DIR = Path("uploads")
+UPLOAD_DIR = Path("uploads")  # Internal tracking directory
+IMAGE_DIR = Path(".")  # Root directory for serving images (like ephemeral-v3/stable/)
 DATA_DIR = Path("data")
 STREAM_DIR = DATA_DIR / "streams" / "v1"
 
@@ -186,26 +187,50 @@ async def upload_image(
     if not kernel and not initrd and not rootfs:
         raise HTTPException(status_code=400, detail="At least one file (kernel, initrd, or rootfs) is required")
     
-    # Create a unique directory for this upload
+    # Create a unique directory for this upload (internal tracking)
     upload_id = hashlib.md5(f"{arch}{release}{version}{datetime.now().isoformat()}".encode()).hexdigest()[:8]
     upload_path = UPLOAD_DIR / upload_id
     upload_path.mkdir(exist_ok=True)
     
+    # Create directory structure like upstream: release/arch/version/subarch/
+    image_dir = IMAGE_DIR / release / arch / version / "custom"
+    image_dir.mkdir(parents=True, exist_ok=True)
+    
     uploaded_files = {}
     
-    # Save uploaded files
+    # Save uploaded files in the proper directory structure
     for file, file_type in [(kernel, "kernel"), (initrd, "initrd"), (rootfs, "rootfs")]:
         if file:
-            file_path = upload_path / f"{file_type}-{file.filename}"
-            async with aiofiles.open(file_path, 'wb') as f:
-                content = await file.read()
+            # Determine file name based on type (matching upstream naming)
+            if file_type == "kernel":
+                filename = "boot-kernel"
+            elif file_type == "initrd":
+                filename = "boot-initrd"
+            elif file_type == "rootfs":
+                filename = "squashfs"
+            else:
+                filename = file_type
+            
+            # Save to both locations:
+            # 1. Internal tracking directory (uploads/)
+            internal_path = upload_path / f"{file_type}-{file.filename}"
+            # 2. Public directory structure (release/arch/version/custom/)
+            public_path = image_dir / filename
+            
+            content = await file.read()
+            
+            async with aiofiles.open(internal_path, 'wb') as f:
                 await f.write(content)
             
+            async with aiofiles.open(public_path, 'wb') as f:
+                await f.write(content)
+            
+            # Use the public path in metadata (matching upstream structure)
             uploaded_files[file_type] = {
                 "filename": file.filename,
-                "path": str(file_path.relative_to(UPLOAD_DIR.parent)),
-                "size": calculate_size(file_path),
-                "sha256": calculate_sha256(file_path)
+                "path": f"{release}/{arch}/{version}/custom/{filename}",
+                "size": calculate_size(public_path),
+                "sha256": calculate_sha256(public_path)
             }
     
     # Save metadata
@@ -261,6 +286,31 @@ async def delete_image(upload_id: str):
     
     if not upload_path.exists() or not upload_path.is_dir():
         raise HTTPException(status_code=404, detail="Image not found")
+    
+    # Read metadata to get the image directory path
+    metadata_path = upload_path / "metadata.json"
+    if metadata_path.exists():
+        async with aiofiles.open(metadata_path, 'r') as f:
+            content = await f.read()
+            metadata = json.loads(content)
+            
+        # Delete from image directory structure
+        image_dir = IMAGE_DIR / metadata['release'] / metadata['arch'] / metadata['version'] / "custom"
+        if image_dir.exists():
+            shutil.rmtree(image_dir, ignore_errors=True)
+            
+            # Clean up empty parent directories
+            version_dir = image_dir.parent
+            if version_dir.exists() and not any(version_dir.iterdir()):
+                shutil.rmtree(version_dir, ignore_errors=True)
+                
+            arch_dir = version_dir.parent if version_dir.exists() else None
+            if arch_dir and arch_dir.exists() and not any(arch_dir.iterdir()):
+                shutil.rmtree(arch_dir, ignore_errors=True)
+                
+            release_dir = arch_dir.parent if arch_dir and arch_dir.exists() else None
+            if release_dir and release_dir.exists() and not any(release_dir.iterdir()):
+                shutil.rmtree(release_dir, ignore_errors=True)
     
     # Delete the upload directory and all its contents
     shutil.rmtree(upload_path)
@@ -401,8 +451,18 @@ async def get_stream_file(filename: str):
 
 @app.get("/uploads/{upload_id}/{filename}")
 async def get_uploaded_file(upload_id: str, filename: str):
-    """Serve uploaded files."""
+    """Serve uploaded files (legacy endpoint for backward compatibility)."""
     file_path = UPLOAD_DIR / upload_id / filename
+    if not file_path.exists() or not file_path.is_file():
+        raise HTTPException(status_code=404, detail="File not found")
+    
+    return FileResponse(file_path)
+
+
+@app.get("/{release}/{arch}/{version}/{subarch}/{filename}")
+async def get_image_file(release: str, arch: str, version: str, subarch: str, filename: str):
+    """Serve image files from the release directory structure (matching upstream format)."""
+    file_path = IMAGE_DIR / release / arch / version / subarch / filename
     if not file_path.exists() or not file_path.is_file():
         raise HTTPException(status_code=404, detail="File not found")
     
