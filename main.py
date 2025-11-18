@@ -19,6 +19,7 @@ UPLOAD_DIR = Path("uploads")  # Internal tracking directory
 IMAGE_DIR = Path(".")  # Root directory for serving images (like ephemeral-v3/stable/)
 DATA_DIR = Path("data")
 STREAM_DIR = DATA_DIR / "streams" / "v1"
+SYNC_DB = DATA_DIR / "synced_images.json"  # Database for tracking synced images
 
 # Create necessary directories
 UPLOAD_DIR.mkdir(exist_ok=True)
@@ -300,22 +301,117 @@ async def upload_image(
     }
 
 
+@app.post("/api/upstream/download")
+async def download_upstream_images(request: Dict[str, Any]):
+    """Download and sync images from upstream mirror."""
+    try:
+        base_url = request.get("base_url", "")
+        selected_images = request.get("images", [])
+        
+        if not base_url or not selected_images:
+            raise HTTPException(status_code=400, detail="base_url and images are required")
+        
+        # Load existing synced images
+        synced = await load_synced_images()
+        synced_dict = {f"{s['release']}_{s['arch']}_{s['version']}_{s['label']}": s for s in synced}
+        
+        downloaded_count = 0
+        async with httpx.AsyncClient(timeout=300.0) as client:
+            for img_info in selected_images:
+                try:
+                    # Create unique key for this image
+                    img_key = f"{img_info['product_release']}_{img_info['product_arch']}_{img_info['version_name']}_{img_info['version_label']}"
+                    
+                    # Skip if already synced
+                    if img_key in synced_dict:
+                        continue
+                    
+                    # Create directory structure
+                    image_dir = IMAGE_DIR / img_info['product_release'] / img_info['product_arch'] / img_info['version_name'] / (img_info['version_label'] or "default")
+                    image_dir.mkdir(parents=True, exist_ok=True)
+                    
+                    # Download the file
+                    file_url = base_url.rstrip('/') + '/' + img_info['item_path']
+                    response = await client.get(file_url)
+                    response.raise_for_status()
+                    
+                    # Determine filename from item_name
+                    filename = img_info['item_name']
+                    file_path = image_dir / filename
+                    
+                    # Save file
+                    async with aiofiles.open(file_path, 'wb') as f:
+                        await f.write(response.content)
+                    
+                    # Calculate hash
+                    sha256 = calculate_sha256(file_path)
+                    size = calculate_size(file_path)
+                    
+                    # Check if we need to create a metadata entry for this image group
+                    if img_key not in synced_dict:
+                        synced_dict[img_key] = {
+                            "arch": img_info['product_arch'],
+                            "release": img_info['product_release'],
+                            "version": img_info['version_name'],
+                            "label": img_info['version_label'] or "default",
+                            "os": img_info['product_os'],
+                            "synced_at": datetime.now().isoformat(),
+                            "files": {}
+                        }
+                    
+                    # Add file info
+                    file_type = img_info['item_ftype'].replace('boot-', '') if img_info['item_ftype'].startswith('boot-') else img_info['item_ftype']
+                    synced_dict[img_key]["files"][file_type] = {
+                        "filename": filename,
+                        "path": f"{img_info['product_release']}/{img_info['product_arch']}/{img_info['version_name']}/{img_info['version_label'] or 'default'}/{filename}",
+                        "size": size,
+                        "sha256": sha256
+                    }
+                    
+                    downloaded_count += 1
+                    
+                except Exception as e:
+                    print(f"Failed to download {img_info.get('item_name', 'unknown')}: {e}")
+                    continue
+        
+        # Save updated synced database
+        await save_synced_images(list(synced_dict.values()))
+        
+        # Update simplestream tree
+        await update_simplestream_tree()
+        
+        return {
+            "success": True,
+            "downloaded": downloaded_count,
+            "message": f"Downloaded {downloaded_count} files successfully"
+        }
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Download failed: {str(e)}")
+
+
 @app.get("/api/images/list")
 async def list_images():
-    """List all uploaded images."""
+    """List all uploaded and synced images."""
     images = []
     
-    if not UPLOAD_DIR.exists():
-        return {"images": []}
+    # Load uploaded images
+    if UPLOAD_DIR.exists():
+        for upload_dir in UPLOAD_DIR.iterdir():
+            if upload_dir.is_dir():
+                metadata_path = upload_dir / "metadata.json"
+                if metadata_path.exists():
+                    async with aiofiles.open(metadata_path, 'r') as f:
+                        content = await f.read()
+                        metadata = json.loads(content)
+                        metadata["source"] = "uploaded"
+                        images.append(metadata)
     
-    for upload_dir in UPLOAD_DIR.iterdir():
-        if upload_dir.is_dir():
-            metadata_path = upload_dir / "metadata.json"
-            if metadata_path.exists():
-                async with aiofiles.open(metadata_path, 'r') as f:
-                    content = await f.read()
-                    metadata = json.loads(content)
-                    images.append(metadata)
+    # Load synced images
+    synced = await load_synced_images()
+    for img in synced:
+        img["source"] = "synced"
+        images.append(img)
     
     return {"images": images}
 
@@ -365,11 +461,27 @@ async def delete_image(upload_id: str):
     }
 
 
+async def load_synced_images():
+    """Load synced images from database."""
+    if not SYNC_DB.exists():
+        return []
+    
+    async with aiofiles.open(SYNC_DB, 'r') as f:
+        content = await f.read()
+        return json.loads(content)
+
+
+async def save_synced_images(synced):
+    """Save synced images to database."""
+    async with aiofiles.open(SYNC_DB, 'w') as f:
+        await f.write(json.dumps(synced, indent=2))
+
+
 async def update_simplestream_tree():
-    """Update the simplestream metadata tree based on uploaded images."""
+    """Update the simplestream metadata tree based on uploaded AND synced images."""
     
     # Load all uploaded images
-    images = []
+    uploaded_images = []
     if UPLOAD_DIR.exists():
         for upload_dir in UPLOAD_DIR.iterdir():
             if upload_dir.is_dir():
@@ -377,26 +489,35 @@ async def update_simplestream_tree():
                 if metadata_path.exists():
                     async with aiofiles.open(metadata_path, 'r') as f:
                         content = await f.read()
-                        images.append(json.loads(content))
+                        uploaded_images.append(json.loads(content))
     
-    # Build products structure following MAAS simplestream format
+    # Load synced images
+    synced_images = await load_synced_images()
+    
+    # Combine all images
+    all_images = uploaded_images + synced_images
+    
+    # Build products structure following MAAS simplestream format (image-ids datatype)
     products = {}
     
-    for img in images:
-        # Product name format: com.ubuntu.maas:v3:os:release:arch:subarch
-        product_name = f"com.ubuntu.maas:v3:{img['os']}:{img['release']}:{img['arch']}:custom"
+    for img in all_images:
+        # Product name format: com.ubuntu.maas.custom:v3:boot:release:arch:subarch
+        product_name = f"com.ubuntu.maas.custom:v3:boot:{img['release']}:{img['arch']}:custom"
         
         if product_name not in products:
             products[product_name] = {
                 "aliases": f"{img['release']}/custom",
                 "arch": img['arch'],
                 "ftype": "squashfs",
+                "kflavor": "generic",
+                "kpackage": "linux-generic",
                 "label": img['label'],
                 "os": img['os'],
                 "release": img['release'],
                 "release_codename": img['release'],
                 "release_title": img['release'].title(),
                 "subarch": "custom",
+                "subarches": "generic,custom",
                 "support_eol": "2099-12-31",
                 "supported_platforms": [],
                 "version": img['version'],
@@ -425,38 +546,36 @@ async def update_simplestream_tree():
             
             products[product_name]["versions"][version_name]["items"][item_name] = {
                 "ftype": item_name,
+                "kpackage": "linux-generic",
+                "krel": "generic",
                 "md5": "",
                 "path": file_info['path'],
                 "sha256": file_info['sha256'],
                 "size": file_info['size']
             }
     
-    # Create products.json with proper MAAS format
+    # Create products.json with proper MAAS format (image-ids datatype)
     products_data = {
-        "content_id": "com.ubuntu.maas:v3:custom",
-        "datatype": "image-downloads",
+        "content_id": "com.ubuntu.maas:custom:v3:download",
+        "datatype": "image-ids",
         "format": "products:1.0",
         "license": "http://www.canonical.com/intellectual-property-policy",
         "products": products,
         "updated": datetime.now().strftime("%a, %d %b %Y %H:%M:%S +0000")
     }
     
-    products_path = STREAM_DIR / "com.ubuntu.maas:v3:custom.json"
+    products_path = STREAM_DIR / "com.ubuntu.maas:custom:v3:download.json"
     async with aiofiles.open(products_path, 'w') as f:
         await f.write(json.dumps(products_data, indent=2))
     
-    # Create index.json with proper MAAS format
+    # Create index.json with proper MAAS format (image-ids datatype)
     index_data = {
         "format": "index:1.0",
         "index": {
-            "com.ubuntu.maas:v3:custom": {
-                "clouds": [
-                    {"region": "custom", "endpoint": ""}
-                ],
-                "cloudname": "custom",
-                "datatype": "image-downloads",
+            "com.ubuntu.maas:custom:v3:download": {
+                "datatype": "image-ids",
                 "format": "products:1.0",
-                "path": "streams/v1/com.ubuntu.maas:v3:custom.json",
+                "path": "streams/v1/com.ubuntu.maas:custom:v3:download.json",
                 "products": list(products.keys()),
                 "updated": datetime.now().strftime("%a, %d %b %Y %H:%M:%S +0000")
             }
