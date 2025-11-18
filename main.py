@@ -92,6 +92,10 @@ async def fetch_upstream(mirror: UpstreamMirror):
                                    '172.30.', '172.31.', '192.168.', '169.254.')):
                 raise HTTPException(status_code=400, detail="Access to private IP ranges is not allowed")
         
+        # If URL doesn't end with index.json, append it
+        if not url_str.endswith('index.json'):
+            url_str = url_str.rstrip('/') + '/index.json'
+        
         async with httpx.AsyncClient(timeout=30.0) as client:
             # Fetch the index.json
             # Note: This intentionally makes requests to user-provided URLs (upstream mirrors)
@@ -100,51 +104,88 @@ async def fetch_upstream(mirror: UpstreamMirror):
             response.raise_for_status()
             index_data = response.json()
             
-            # Extract the products stream URL
-            if "index" not in index_data or "images" not in index_data["index"]:
+            # Handle different index formats
+            if "index" not in index_data:
                 raise HTTPException(status_code=400, detail="Invalid simplestream index format")
             
-            products_path = index_data["index"]["images"]["path"]
-            
-            # Build the full URL for products
-            base_url = str(mirror.url).rsplit('/', 1)[0]
-            products_url = f"{base_url}/{products_path}"
-            
-            # Fetch the products file
-            products_response = await client.get(products_url)
-            products_response.raise_for_status()
-            products_data = products_response.json()
-            
-            # Parse and return simplified product list
+            # Parse and return simplified product list from all streams
             simplified_products = []
             
-            if "products" in products_data:
-                for product_name, product_info in products_data["products"].items():
-                    if "versions" not in product_info:
-                        continue
+            # Determine the base URL for constructing product paths
+            # URL now always ends with index.json
+            base_url = url_str.rsplit('/', 1)[0]
+            
+            # Iterate through all streams in the index
+            for stream_name, stream_info in index_data["index"].items():
+                # Skip if not a valid stream with a path
+                if "path" not in stream_info:
+                    continue
+                
+                # Process all image-related streams (image-downloads and image-ids)
+                datatype = stream_info.get("datatype", "")
+                if datatype not in ["image-downloads", "image-ids"]:
+                    continue
+                
+                products_path = stream_info["path"]
+                
+                # Build the products URL - handle both relative and absolute paths
+                if products_path.startswith('http://') or products_path.startswith('https://'):
+                    products_url = products_path
+                elif products_path.startswith('/'):
+                    # Absolute path from root
+                    parsed_base = urlparse(base_url)
+                    products_url = f"{parsed_base.scheme}://{parsed_base.netloc}{products_path}"
+                else:
+                    # Relative path - need to go up to the proper base
+                    # If path starts with "streams/v1/", we need the root of the mirror
+                    if products_path.startswith('streams/'):
+                        # Remove "streams/v1/" from base_url if present
+                        mirror_root = base_url.split('/streams/')[0]
+                        products_url = f"{mirror_root}/{products_path}"
+                    else:
+                        products_url = f"{base_url}/{products_path}"
+                
+                try:
+                    # Fetch the products file for this stream
+                    products_response = await client.get(products_url)
+                    products_response.raise_for_status()
+                    products_data = products_response.json()
                     
-                    for version_name, version_info in product_info["versions"].items():
-                        if "items" not in version_info:
-                            continue
-                        
-                        for item_name, item_info in version_info["items"].items():
-                            simplified_products.append({
-                                "product_name": product_name,
-                                "product_arch": product_info.get("arch", "unknown"),
-                                "product_os": product_info.get("os", "unknown"),
-                                "product_release": product_info.get("release", "unknown"),
-                                "version_name": version_name,
-                                "version_label": version_info.get("label", ""),
-                                "item_name": item_name,
-                                "item_ftype": item_info.get("ftype", "unknown"),
-                                "item_size": item_info.get("size", 0),
-                                "item_sha256": item_info.get("sha256", ""),
-                                "item_path": item_info.get("path", ""),
-                            })
+                    # Parse products from this stream
+                    if "products" in products_data:
+                        for product_name, product_info in products_data["products"].items():
+                            if "versions" not in product_info:
+                                continue
+                            
+                            # Extract product-level label (not version-level)
+                            product_label = product_info.get("label", "")
+                            
+                            for version_name, version_info in product_info["versions"].items():
+                                if "items" not in version_info:
+                                    continue
+                                
+                                for item_name, item_info in version_info["items"].items():
+                                    simplified_products.append({
+                                        "product_name": product_name,
+                                        "product_arch": product_info.get("arch", "unknown"),
+                                        "product_os": product_info.get("os", "unknown"),
+                                        "product_release": product_info.get("release", "unknown"),
+                                        "version_name": version_name,
+                                        "version_label": product_label,
+                                        "item_name": item_name,
+                                        "item_ftype": item_info.get("ftype", "unknown"),
+                                        "item_size": item_info.get("size", 0),
+                                        "item_sha256": item_info.get("sha256", ""),
+                                        "item_path": item_info.get("path", ""),
+                                    })
+                except Exception as e:
+                    # Log and continue if a specific stream fails
+                    print(f"Failed to fetch stream {stream_name}: {e}")
+                    continue
             
             return {
-                "format": products_data.get("format", ""),
-                "updated": products_data.get("updated", ""),
+                "format": "products:1.0",
+                "updated": index_data.get("updated", ""),
                 "products": simplified_products
             }
             

@@ -33,6 +33,27 @@ def test_simplestream_products():
     assert "products" in data
     print("✓ Simplestream products endpoint works")
 
+def test_upstream_fetch():
+    """Test fetching from upstream simplestream mirror."""
+    print("Testing upstream fetch endpoint...")
+    # Test with directory URL (with trailing slash)
+    response = requests.post(f"{BASE_URL}/api/upstream/fetch", 
+        json={"url": "https://images.maas.io/ephemeral-v3/stable/streams/v1/"})
+    assert response.status_code == 200
+    data = response.json()
+    assert "products" in data
+    assert len(data["products"]) > 0
+    print(f"✓ Fetched {len(data['products'])} products from upstream")
+    
+    # Verify some expected fields in products
+    if data["products"]:
+        first_product = data["products"][0]
+        assert "product_name" in first_product
+        assert "product_arch" in first_product
+        assert "item_ftype" in first_product
+        print("✓ Product structure is correct")
+
+
 def test_upload_image():
     """Test image upload functionality."""
     print("Testing image upload...")
@@ -152,6 +173,7 @@ def main():
     try:
         test_simplestream_index()
         test_simplestream_products()
+        test_upstream_fetch()
         upload_id = test_upload_image()
         test_list_images()
         test_file_download(upload_id)
