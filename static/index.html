@@ -1,0 +1,583 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MAAS Custom Simplestream Server</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css" rel="stylesheet">
+    <style>
+        body {
+            background-color: #f8f9fa;
+        }
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 2rem 0;
+            margin-bottom: 2rem;
+        }
+        .card {
+            margin-bottom: 1.5rem;
+            box-shadow: 0 0.125rem 0.25rem rgba(0,0,0,0.075);
+        }
+        .table-container {
+            max-height: 500px;
+            overflow-y: auto;
+        }
+        .spinner-border-sm {
+            width: 1rem;
+            height: 1rem;
+        }
+        .badge-custom {
+            padding: 0.35rem 0.65rem;
+        }
+        .form-label {
+            font-weight: 500;
+        }
+        .alert-fixed {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            z-index: 1050;
+            min-width: 300px;
+        }
+    </style>
+</head>
+<body>
+    <!-- Header -->
+    <div class="header">
+        <div class="container">
+            <h1><i class="bi bi-cloud-arrow-down"></i> MAAS Custom Simplestream Server</h1>
+            <p class="lead mb-0">Manage and serve custom MAAS images via simplestream</p>
+        </div>
+    </div>
+
+    <!-- Alerts Container -->
+    <div id="alertsContainer"></div>
+
+    <div class="container">
+        <!-- Tabs -->
+        <ul class="nav nav-tabs mb-4" id="mainTabs" role="tablist">
+            <li class="nav-item" role="presentation">
+                <button class="nav-link active" id="upstream-tab" data-bs-toggle="tab" data-bs-target="#upstream" type="button" role="tab">
+                    <i class="bi bi-cloud-download"></i> Upstream Mirror
+                </button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="upload-tab" data-bs-toggle="tab" data-bs-target="#upload" type="button" role="tab">
+                    <i class="bi bi-cloud-upload"></i> Upload Images
+                </button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="images-tab" data-bs-toggle="tab" data-bs-target="#images" type="button" role="tab">
+                    <i class="bi bi-images"></i> Uploaded Images
+                </button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="stream-tab" data-bs-toggle="tab" data-bs-target="#stream" type="button" role="tab">
+                    <i class="bi bi-link-45deg"></i> Simplestream URLs
+                </button>
+            </li>
+        </ul>
+
+        <div class="tab-content" id="mainTabContent">
+            <!-- Upstream Mirror Tab -->
+            <div class="tab-pane fade show active" id="upstream" role="tabpanel">
+                <div class="card">
+                    <div class="card-header bg-primary text-white">
+                        <h5 class="mb-0"><i class="bi bi-server"></i> Fetch from Upstream Mirror</h5>
+                    </div>
+                    <div class="card-body">
+                        <form id="upstreamForm">
+                            <div class="row">
+                                <div class="col-md-10">
+                                    <label for="upstreamUrl" class="form-label">Upstream Mirror URL</label>
+                                    <input type="url" class="form-control" id="upstreamUrl" 
+                                           value="https://images.maas.io/ephemeral-v3/stable/streams/v1/index.json"
+                                           placeholder="https://images.maas.io/ephemeral-v3/stable/streams/v1/index.json" required>
+                                    <div class="form-text">Enter the URL to the simplestream index.json file</div>
+                                </div>
+                                <div class="col-md-2 d-flex align-items-end">
+                                    <button type="submit" class="btn btn-primary w-100" id="fetchBtn">
+                                        <i class="bi bi-search"></i> Fetch
+                                    </button>
+                                </div>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+
+                <div id="upstreamResults" style="display: none;">
+                    <div class="card">
+                        <div class="card-header d-flex justify-content-between align-items-center">
+                            <h5 class="mb-0"><i class="bi bi-list-check"></i> Available Images</h5>
+                            <div>
+                                <button class="btn btn-sm btn-success" id="mirrorSelectedBtn" disabled>
+                                    <i class="bi bi-download"></i> Mirror Selected
+                                </button>
+                                <button class="btn btn-sm btn-secondary" id="selectAllBtn">
+                                    <i class="bi bi-check-all"></i> Select All
+                                </button>
+                                <button class="btn btn-sm btn-secondary" id="deselectAllBtn">
+                                    <i class="bi bi-x-circle"></i> Deselect All
+                                </button>
+                            </div>
+                        </div>
+                        <div class="card-body">
+                            <div class="mb-3">
+                                <input type="text" class="form-control" id="searchImages" placeholder="Search images...">
+                            </div>
+                            <div class="table-container">
+                                <table class="table table-hover table-sm">
+                                    <thead class="table-light sticky-top">
+                                        <tr>
+                                            <th><input type="checkbox" id="selectAllCheckbox"></th>
+                                            <th>OS</th>
+                                            <th>Release</th>
+                                            <th>Arch</th>
+                                            <th>Version</th>
+                                            <th>Type</th>
+                                            <th>Size</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="upstreamImagesTable">
+                                    </tbody>
+                                </table>
+                            </div>
+                            <div id="imageCount" class="mt-2 text-muted"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Upload Images Tab -->
+            <div class="tab-pane fade" id="upload" role="tabpanel">
+                <div class="card">
+                    <div class="card-header bg-success text-white">
+                        <h5 class="mb-0"><i class="bi bi-upload"></i> Upload Custom Images</h5>
+                    </div>
+                    <div class="card-body">
+                        <form id="uploadForm" enctype="multipart/form-data">
+                            <div class="row mb-3">
+                                <div class="col-md-6">
+                                    <label for="arch" class="form-label">Architecture *</label>
+                                    <select class="form-select" id="arch" required>
+                                        <option value="">Select architecture...</option>
+                                        <option value="amd64">amd64</option>
+                                        <option value="arm64">arm64</option>
+                                        <option value="i386">i386</option>
+                                        <option value="ppc64el">ppc64el</option>
+                                        <option value="s390x">s390x</option>
+                                    </select>
+                                </div>
+                                <div class="col-md-6">
+                                    <label for="os" class="form-label">Operating System *</label>
+                                    <input type="text" class="form-control" id="os" value="ubuntu" required>
+                                </div>
+                            </div>
+                            <div class="row mb-3">
+                                <div class="col-md-6">
+                                    <label for="release" class="form-label">Release *</label>
+                                    <input type="text" class="form-control" id="release" placeholder="e.g., focal, jammy" required>
+                                </div>
+                                <div class="col-md-6">
+                                    <label for="version" class="form-label">Version *</label>
+                                    <input type="text" class="form-control" id="version" placeholder="e.g., 20241118" required>
+                                </div>
+                            </div>
+                            <div class="mb-3">
+                                <label for="label" class="form-label">Label *</label>
+                                <input type="text" class="form-control" id="label" placeholder="e.g., custom" required>
+                            </div>
+                            
+                            <hr class="my-4">
+                            <h6>Upload Files (at least one required)</h6>
+                            
+                            <div class="mb-3">
+                                <label for="kernel" class="form-label">Kernel</label>
+                                <input type="file" class="form-control" id="kernel">
+                                <div class="form-text">Kernel image file</div>
+                            </div>
+                            <div class="mb-3">
+                                <label for="initrd" class="form-label">Initrd</label>
+                                <input type="file" class="form-control" id="initrd">
+                                <div class="form-text">Initial ramdisk file</div>
+                            </div>
+                            <div class="mb-3">
+                                <label for="rootfs" class="form-label">Root Filesystem</label>
+                                <input type="file" class="form-control" id="rootfs">
+                                <div class="form-text">Root filesystem image (squashfs, ext4, etc.)</div>
+                            </div>
+                            
+                            <button type="submit" class="btn btn-success btn-lg w-100" id="uploadBtn">
+                                <i class="bi bi-cloud-upload"></i> Upload Images
+                            </button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Uploaded Images Tab -->
+            <div class="tab-pane fade" id="images" role="tabpanel">
+                <div class="card">
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <h5 class="mb-0"><i class="bi bi-images"></i> Uploaded Images</h5>
+                        <button class="btn btn-sm btn-primary" id="refreshImagesBtn">
+                            <i class="bi bi-arrow-clockwise"></i> Refresh
+                        </button>
+                    </div>
+                    <div class="card-body">
+                        <div id="uploadedImagesContainer">
+                            <div class="text-center text-muted py-5">
+                                <i class="bi bi-image" style="font-size: 3rem;"></i>
+                                <p class="mt-2">Loading images...</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Simplestream URLs Tab -->
+            <div class="tab-pane fade" id="stream" role="tabpanel">
+                <div class="card">
+                    <div class="card-header bg-info text-white">
+                        <h5 class="mb-0"><i class="bi bi-link-45deg"></i> Simplestream URLs</h5>
+                    </div>
+                    <div class="card-body">
+                        <p>Use these URLs to configure MAAS to use this custom simplestream server:</p>
+                        
+                        <div class="alert alert-info">
+                            <h6><i class="bi bi-info-circle"></i> Index URL</h6>
+                            <div class="input-group">
+                                <input type="text" class="form-control" id="indexUrl" readonly>
+                                <button class="btn btn-outline-secondary" onclick="copyToClipboard('indexUrl')">
+                                    <i class="bi bi-clipboard"></i> Copy
+                                </button>
+                            </div>
+                            <small class="text-muted">Use this URL in MAAS boot source configuration</small>
+                        </div>
+
+                        <div class="alert alert-secondary">
+                            <h6><i class="bi bi-file-earmark-code"></i> Products URL</h6>
+                            <div class="input-group">
+                                <input type="text" class="form-control" id="productsUrl" readonly>
+                                <button class="btn btn-outline-secondary" onclick="copyToClipboard('productsUrl')">
+                                    <i class="bi bi-clipboard"></i> Copy
+                                </button>
+                            </div>
+                        </div>
+
+                        <hr>
+                        <h6>Example MAAS Configuration</h6>
+                        <pre class="bg-light p-3 rounded"><code>maas admin boot-sources create \
+    url=<span id="indexUrlExample"></span> \
+    keyring_filename="" \
+    keyring_data=""</code></pre>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        let upstreamData = [];
+        let filteredData = [];
+
+        // Initialize
+        document.addEventListener('DOMContentLoaded', function() {
+            const baseUrl = window.location.origin;
+            document.getElementById('indexUrl').value = `${baseUrl}/streams/v1/index.json`;
+            document.getElementById('productsUrl').value = `${baseUrl}/streams/v1/products.json`;
+            document.getElementById('indexUrlExample').textContent = `${baseUrl}/streams/v1/index.json`;
+            
+            loadUploadedImages();
+        });
+
+        // Show alert
+        function showAlert(message, type = 'success') {
+            const alertDiv = document.createElement('div');
+            alertDiv.className = `alert alert-${type} alert-dismissible fade show alert-fixed`;
+            alertDiv.innerHTML = `
+                ${message}
+                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+            `;
+            document.getElementById('alertsContainer').appendChild(alertDiv);
+            
+            setTimeout(() => {
+                alertDiv.remove();
+            }, 5000);
+        }
+
+        // Copy to clipboard
+        function copyToClipboard(elementId) {
+            const element = document.getElementById(elementId);
+            element.select();
+            document.execCommand('copy');
+            showAlert('Copied to clipboard!', 'info');
+        }
+
+        // Fetch upstream images
+        document.getElementById('upstreamForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            
+            const url = document.getElementById('upstreamUrl').value;
+            const fetchBtn = document.getElementById('fetchBtn');
+            
+            fetchBtn.disabled = true;
+            fetchBtn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Fetching...';
+            
+            try {
+                const response = await fetch('/api/upstream/fetch', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ url: url })
+                });
+                
+                if (!response.ok) {
+                    const error = await response.json();
+                    throw new Error(error.detail || 'Failed to fetch upstream');
+                }
+                
+                const data = await response.json();
+                upstreamData = data.products;
+                filteredData = upstreamData;
+                
+                displayUpstreamImages(filteredData);
+                document.getElementById('upstreamResults').style.display = 'block';
+                showAlert(`Successfully fetched ${upstreamData.length} images`, 'success');
+                
+            } catch (error) {
+                showAlert(`Error: ${error.message}`, 'danger');
+            } finally {
+                fetchBtn.disabled = false;
+                fetchBtn.innerHTML = '<i class="bi bi-search"></i> Fetch';
+            }
+        });
+
+        // Display upstream images
+        function displayUpstreamImages(images) {
+            const tbody = document.getElementById('upstreamImagesTable');
+            tbody.innerHTML = '';
+            
+            images.forEach((img, index) => {
+                const row = tbody.insertRow();
+                row.innerHTML = `
+                    <td><input type="checkbox" class="image-checkbox" data-index="${index}"></td>
+                    <td>${img.product_os}</td>
+                    <td>${img.product_release}</td>
+                    <td>${img.product_arch}</td>
+                    <td><small>${img.version_name}</small></td>
+                    <td><span class="badge bg-secondary badge-custom">${img.item_ftype}</span></td>
+                    <td>${formatBytes(img.item_size)}</td>
+                `;
+            });
+            
+            document.getElementById('imageCount').textContent = `Showing ${images.length} images`;
+            
+            // Update checkbox listeners
+            document.querySelectorAll('.image-checkbox').forEach(cb => {
+                cb.addEventListener('change', updateMirrorButton);
+            });
+        }
+
+        // Format bytes
+        function formatBytes(bytes) {
+            if (bytes === 0) return '0 Bytes';
+            const k = 1024;
+            const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+            const i = Math.floor(Math.log(bytes) / Math.log(k));
+            return Math.round(bytes / Math.pow(k, i) * 100) / 100 + ' ' + sizes[i];
+        }
+
+        // Search images
+        document.getElementById('searchImages').addEventListener('input', function(e) {
+            const searchTerm = e.target.value.toLowerCase();
+            filteredData = upstreamData.filter(img => {
+                return img.product_os.toLowerCase().includes(searchTerm) ||
+                       img.product_release.toLowerCase().includes(searchTerm) ||
+                       img.product_arch.toLowerCase().includes(searchTerm) ||
+                       img.version_name.toLowerCase().includes(searchTerm);
+            });
+            displayUpstreamImages(filteredData);
+        });
+
+        // Select all
+        document.getElementById('selectAllBtn').addEventListener('click', function() {
+            document.querySelectorAll('.image-checkbox').forEach(cb => cb.checked = true);
+            updateMirrorButton();
+        });
+
+        // Deselect all
+        document.getElementById('deselectAllBtn').addEventListener('click', function() {
+            document.querySelectorAll('.image-checkbox').forEach(cb => cb.checked = false);
+            updateMirrorButton();
+        });
+
+        // Select all checkbox
+        document.getElementById('selectAllCheckbox').addEventListener('change', function(e) {
+            document.querySelectorAll('.image-checkbox').forEach(cb => cb.checked = e.target.checked);
+            updateMirrorButton();
+        });
+
+        // Update mirror button
+        function updateMirrorButton() {
+            const selectedCount = document.querySelectorAll('.image-checkbox:checked').length;
+            const btn = document.getElementById('mirrorSelectedBtn');
+            btn.disabled = selectedCount === 0;
+            btn.textContent = selectedCount > 0 ? `Mirror ${selectedCount} Selected` : 'Mirror Selected';
+        }
+
+        // Mirror selected images
+        document.getElementById('mirrorSelectedBtn').addEventListener('click', async function() {
+            const selected = [];
+            document.querySelectorAll('.image-checkbox:checked').forEach(cb => {
+                const index = parseInt(cb.dataset.index);
+                const img = filteredData[index];
+                selected.push({
+                    product_name: img.product_name,
+                    version_name: img.version_name,
+                    item_name: img.item_name
+                });
+            });
+            
+            try {
+                const response = await fetch('/api/images/mirror', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(selected)
+                });
+                
+                const data = await response.json();
+                showAlert(data.message, 'info');
+                
+            } catch (error) {
+                showAlert(`Error: ${error.message}`, 'danger');
+            }
+        });
+
+        // Upload form
+        document.getElementById('uploadForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            
+            const formData = new FormData();
+            formData.append('arch', document.getElementById('arch').value);
+            formData.append('os', document.getElementById('os').value);
+            formData.append('release', document.getElementById('release').value);
+            formData.append('version', document.getElementById('version').value);
+            formData.append('label', document.getElementById('label').value);
+            
+            const kernel = document.getElementById('kernel').files[0];
+            const initrd = document.getElementById('initrd').files[0];
+            const rootfs = document.getElementById('rootfs').files[0];
+            
+            if (!kernel && !initrd && !rootfs) {
+                showAlert('Please select at least one file to upload', 'warning');
+                return;
+            }
+            
+            if (kernel) formData.append('kernel', kernel);
+            if (initrd) formData.append('initrd', initrd);
+            if (rootfs) formData.append('rootfs', rootfs);
+            
+            const uploadBtn = document.getElementById('uploadBtn');
+            uploadBtn.disabled = true;
+            uploadBtn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Uploading...';
+            
+            try {
+                const response = await fetch('/api/images/upload', {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                if (!response.ok) {
+                    const error = await response.json();
+                    throw new Error(error.detail || 'Upload failed');
+                }
+                
+                const data = await response.json();
+                showAlert('Images uploaded successfully!', 'success');
+                document.getElementById('uploadForm').reset();
+                
+                // Switch to uploaded images tab and refresh
+                const imagesTab = new bootstrap.Tab(document.getElementById('images-tab'));
+                imagesTab.show();
+                loadUploadedImages();
+                
+            } catch (error) {
+                showAlert(`Error: ${error.message}`, 'danger');
+            } finally {
+                uploadBtn.disabled = false;
+                uploadBtn.innerHTML = '<i class="bi bi-cloud-upload"></i> Upload Images';
+            }
+        });
+
+        // Load uploaded images
+        async function loadUploadedImages() {
+            const container = document.getElementById('uploadedImagesContainer');
+            container.innerHTML = '<div class="text-center"><span class="spinner-border"></span> Loading...</div>';
+            
+            try {
+                const response = await fetch('/api/images/list');
+                const data = await response.json();
+                
+                if (data.images.length === 0) {
+                    container.innerHTML = `
+                        <div class="text-center text-muted py-5">
+                            <i class="bi bi-inbox" style="font-size: 3rem;"></i>
+                            <p class="mt-2">No images uploaded yet</p>
+                        </div>
+                    `;
+                    return;
+                }
+                
+                container.innerHTML = '';
+                data.images.forEach(img => {
+                    const card = document.createElement('div');
+                    card.className = 'card mb-3';
+                    
+                    const filesList = Object.entries(img.files).map(([type, file]) => `
+                        <li><strong>${type}:</strong> ${file.filename} 
+                            <span class="badge bg-info">${formatBytes(file.size)}</span>
+                        </li>
+                    `).join('');
+                    
+                    card.innerHTML = `
+                        <div class="card-body">
+                            <div class="row">
+                                <div class="col-md-8">
+                                    <h5 class="card-title">${img.os} ${img.release} (${img.arch})</h5>
+                                    <p class="card-text">
+                                        <strong>Version:</strong> ${img.version}<br>
+                                        <strong>Label:</strong> ${img.label}<br>
+                                        <strong>Upload ID:</strong> <code>${img.upload_id}</code><br>
+                                        <strong>Uploaded:</strong> ${new Date(img.uploaded_at).toLocaleString()}
+                                    </p>
+                                </div>
+                                <div class="col-md-4">
+                                    <h6>Files:</h6>
+                                    <ul class="list-unstyled">
+                                        ${filesList}
+                                    </ul>
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                    
+                    container.appendChild(card);
+                });
+                
+            } catch (error) {
+                container.innerHTML = `<div class="alert alert-danger">Error loading images: ${error.message}</div>`;
+            }
+        }
+
+        // Refresh images button
+        document.getElementById('refreshImagesBtn').addEventListener('click', loadUploadedImages);
+    </script>
+</body>
+</html>
