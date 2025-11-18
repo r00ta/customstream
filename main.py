@@ -254,6 +254,26 @@ async def list_images():
     return {"images": images}
 
 
+@app.delete("/api/images/{upload_id}")
+async def delete_image(upload_id: str):
+    """Delete an uploaded image by upload_id."""
+    upload_path = UPLOAD_DIR / upload_id
+    
+    if not upload_path.exists() or not upload_path.is_dir():
+        raise HTTPException(status_code=404, detail="Image not found")
+    
+    # Delete the upload directory and all its contents
+    shutil.rmtree(upload_path)
+    
+    # Update the simplestream tree
+    await update_simplestream_tree()
+    
+    return {
+        "success": True,
+        "message": f"Image {upload_id} deleted successfully"
+    }
+
+
 async def update_simplestream_tree():
     """Update the simplestream metadata tree based on uploaded images."""
     
@@ -268,19 +288,26 @@ async def update_simplestream_tree():
                         content = await f.read()
                         images.append(json.loads(content))
     
-    # Build products structure
+    # Build products structure following MAAS simplestream format
     products = {}
     
     for img in images:
-        product_name = f"com.ubuntu.maas:{img['os']}:{img['release']}:{img['arch']}:custom"
+        # Product name format: com.ubuntu.maas:v3:os:release:arch:subarch
+        product_name = f"com.ubuntu.maas:v3:{img['os']}:{img['release']}:{img['arch']}:custom"
         
         if product_name not in products:
             products[product_name] = {
+                "aliases": f"{img['release']}/custom",
                 "arch": img['arch'],
+                "ftype": "squashfs",
+                "label": img['label'],
                 "os": img['os'],
                 "release": img['release'],
+                "release_codename": img['release'],
                 "release_title": img['release'].title(),
+                "subarch": "custom",
                 "support_eol": "2099-12-31",
+                "supported_platforms": [],
                 "version": img['version'],
                 "versions": {}
             }
@@ -290,45 +317,60 @@ async def update_simplestream_tree():
             products[product_name]["versions"][version_name] = {
                 "items": {},
                 "label": img['label'],
-                "pubname": f"{img['os']}-{img['release']}-{img['version']}-{img['arch']}"
+                "pubname": f"{img['os']}-{img['release']}-{img['version']}-{img['arch']}-custom"
             }
         
-        # Add each file as an item
+        # Add each file as an item with proper ftype naming
         for file_type, file_info in img['files'].items():
-            item_name = f"{file_type}.img" if file_type == "rootfs" else file_type
+            # Map file types to MAAS item names
+            if file_type == "kernel":
+                item_name = "boot-kernel"
+            elif file_type == "initrd":
+                item_name = "boot-initrd"
+            elif file_type == "rootfs":
+                item_name = "squashfs"
+            else:
+                item_name = file_type
+            
             products[product_name]["versions"][version_name]["items"][item_name] = {
-                "ftype": file_type,
+                "ftype": item_name,
                 "md5": "",
                 "path": file_info['path'],
                 "sha256": file_info['sha256'],
                 "size": file_info['size']
             }
     
-    # Create products.json
+    # Create products.json with proper MAAS format
     products_data = {
-        "content_id": "com.ubuntu.maas:custom",
+        "content_id": "com.ubuntu.maas:v3:custom",
+        "datatype": "image-downloads",
         "format": "products:1.0",
-        "updated": datetime.now().strftime("%a, %d %b %Y %H:%M:%S %z"),
-        "products": products
+        "license": "http://www.canonical.com/intellectual-property-policy",
+        "products": products,
+        "updated": datetime.now().strftime("%a, %d %b %Y %H:%M:%S +0000")
     }
     
-    products_path = STREAM_DIR / "products.json"
+    products_path = STREAM_DIR / "com.ubuntu.maas:v3:custom.json"
     async with aiofiles.open(products_path, 'w') as f:
         await f.write(json.dumps(products_data, indent=2))
     
-    # Create index.json
+    # Create index.json with proper MAAS format
     index_data = {
         "format": "index:1.0",
         "index": {
-            "images": {
+            "com.ubuntu.maas:v3:custom": {
+                "clouds": [
+                    {"region": "custom", "endpoint": ""}
+                ],
+                "cloudname": "custom",
                 "datatype": "image-downloads",
-                "path": "streams/v1/products.json",
-                "updated": datetime.now().strftime("%a, %d %b %Y %H:%M:%S %z"),
+                "format": "products:1.0",
+                "path": "streams/v1/com.ubuntu.maas:v3:custom.json",
                 "products": list(products.keys()),
-                "format": "products:1.0"
+                "updated": datetime.now().strftime("%a, %d %b %Y %H:%M:%S +0000")
             }
         },
-        "updated": datetime.now().strftime("%a, %d %b %Y %H:%M:%S %z")
+        "updated": datetime.now().strftime("%a, %d %b %Y %H:%M:%S +0000")
     }
     
     index_path = DATA_DIR / "streams" / "v1" / "index.json"
@@ -347,14 +389,14 @@ async def get_index():
     return FileResponse(index_path)
 
 
-@app.get("/streams/v1/products.json")
-async def get_products():
-    """Serve the simplestream products."""
-    products_path = STREAM_DIR / "products.json"
-    if not products_path.exists():
-        raise HTTPException(status_code=404, detail="Products file not found")
+@app.get("/streams/v1/{filename}")
+async def get_stream_file(filename: str):
+    """Serve simplestream files (products, index, etc)."""
+    file_path = STREAM_DIR / filename
+    if not file_path.exists():
+        raise HTTPException(status_code=404, detail="Stream file not found")
     
-    return FileResponse(products_path)
+    return FileResponse(file_path)
 
 
 @app.get("/uploads/{upload_id}/{filename}")

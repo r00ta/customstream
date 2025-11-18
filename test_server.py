@@ -18,13 +18,15 @@ def test_simplestream_index():
     data = response.json()
     assert data["format"] == "index:1.0"
     assert "index" in data
-    assert "images" in data["index"]
+    # Updated to check for the new MAAS v3 format
+    assert "com.ubuntu.maas:v3:custom" in data["index"]
     print("✓ Simplestream index endpoint works")
 
 def test_simplestream_products():
     """Test that the simplestream products endpoint works."""
     print("Testing simplestream products endpoint...")
-    response = requests.get(f"{BASE_URL}/streams/v1/products.json")
+    # The products file is now named differently
+    response = requests.get(f"{BASE_URL}/streams/v1/com.ubuntu.maas:v3:custom.json")
     assert response.status_code == 200
     data = response.json()
     assert data["format"] == "products:1.0"
@@ -101,11 +103,11 @@ def test_file_download(upload_id):
 def test_products_updated():
     """Test that products.json was updated with the uploaded image."""
     print("Testing products.json update...")
-    response = requests.get(f"{BASE_URL}/streams/v1/products.json")
+    response = requests.get(f"{BASE_URL}/streams/v1/com.ubuntu.maas:v3:custom.json")
     assert response.status_code == 200
     data = response.json()
     
-    # Check for jammy product
+    # Check for jammy product with new naming format
     found_product = False
     for product_name, product in data["products"].items():
         if "jammy" in product_name:
@@ -113,10 +115,32 @@ def test_products_updated():
             assert product["release"] == "jammy"
             assert product["arch"] == "amd64"
             assert "versions" in product
+            # Check for proper MAAS file types
+            versions = list(product["versions"].values())
+            if versions:
+                items = versions[0]["items"]
+                assert "boot-kernel" in items or "boot-initrd" in items or "squashfs" in items
             print(f"✓ Product found in metadata: {product_name}")
             break
     
     assert found_product, "Uploaded product not found in products.json"
+
+def test_delete_image(upload_id):
+    """Test image deletion functionality."""
+    print("Testing image deletion...")
+    response = requests.delete(f"{BASE_URL}/api/images/{upload_id}")
+    assert response.status_code == 200
+    data = response.json()
+    assert data["success"] == True
+    print(f"✓ Image deleted successfully (upload_id: {upload_id})")
+    
+    # Verify image is no longer in the list
+    response = requests.get(f"{BASE_URL}/api/images/list")
+    assert response.status_code == 200
+    data = response.json()
+    for img in data["images"]:
+        assert img["upload_id"] != upload_id, "Deleted image still in list"
+    print("✓ Image removed from list after deletion")
 
 def main():
     """Run all tests."""
@@ -132,6 +156,7 @@ def main():
         test_list_images()
         test_file_download(upload_id)
         test_products_updated()
+        test_delete_image(upload_id)
         
         print()
         print("=" * 60)

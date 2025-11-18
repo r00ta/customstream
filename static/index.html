@@ -550,6 +550,7 @@
                 data.images.forEach(img => {
                     const card = document.createElement('div');
                     card.className = 'p-card u-sv2';
+                    card.id = `image-${img.upload_id}`;
                     
                     const filesList = Object.entries(img.files).map(([type, file]) => `
                         <li><strong>${type}:</strong> ${file.filename} 
@@ -574,6 +575,9 @@
                                     <ul class="p-list">
                                         ${filesList}
                                     </ul>
+                                    <button class="p-button--negative is-small u-full-width" onclick="deleteImage('${img.upload_id}')">
+                                        <i class="p-icon--delete"></i> Delete Image
+                                    </button>
                                 </div>
                             </div>
                         </div>
@@ -584,6 +588,46 @@
                 
             } catch (error) {
                 container.innerHTML = `<div class="p-notification--negative"><div class="p-notification__content"><p class="p-notification__message">Error loading images: ${error.message}</p></div></div>`;
+            }
+        }
+
+        // Delete image function
+        async function deleteImage(uploadId) {
+            if (!confirm('Are you sure you want to delete this image? This action cannot be undone.')) {
+                return;
+            }
+            
+            try {
+                const response = await fetch(`/api/images/${uploadId}`, {
+                    method: 'DELETE'
+                });
+                
+                if (!response.ok) {
+                    const error = await response.json();
+                    throw new Error(error.detail || 'Failed to delete image');
+                }
+                
+                const data = await response.json();
+                showAlert(data.message, 'positive');
+                
+                // Remove the card from the UI
+                const card = document.getElementById(`image-${uploadId}`);
+                if (card) {
+                    card.remove();
+                }
+                
+                // If no more images, show the empty state
+                const container = document.getElementById('uploadedImagesContainer');
+                if (container.children.length === 0) {
+                    container.innerHTML = `
+                        <div class="u-align--center u-sv3">
+                            <p class="u-text--muted">No images uploaded yet</p>
+                        </div>
+                    `;
+                }
+                
+            } catch (error) {
+                showAlert(`Error deleting image: ${error.message}`, 'negative');
             }
         }
 
