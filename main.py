@@ -67,9 +67,33 @@ async def root():
 async def fetch_upstream(mirror: UpstreamMirror):
     """Fetch available images from an upstream simplestream mirror."""
     try:
+        # Basic URL validation to prevent SSRF attacks
+        url_str = str(mirror.url)
+        
+        # Only allow http and https schemes
+        if not url_str.startswith(('http://', 'https://')):
+            raise HTTPException(status_code=400, detail="Only HTTP and HTTPS URLs are allowed")
+        
+        # Prevent access to localhost and private IP ranges
+        from urllib.parse import urlparse
+        parsed = urlparse(url_str)
+        hostname = parsed.hostname
+        
+        if hostname:
+            # Block localhost and private IPs
+            if hostname.lower() in ('localhost', '127.0.0.1', '0.0.0.0', '::1'):
+                raise HTTPException(status_code=400, detail="Access to localhost is not allowed")
+            
+            # Block private IP ranges (basic check)
+            if hostname.startswith(('10.', '172.16.', '172.17.', '172.18.', '172.19.', 
+                                   '172.20.', '172.21.', '172.22.', '172.23.', '172.24.',
+                                   '172.25.', '172.26.', '172.27.', '172.28.', '172.29.',
+                                   '172.30.', '172.31.', '192.168.', '169.254.')):
+                raise HTTPException(status_code=400, detail="Access to private IP ranges is not allowed")
+        
         async with httpx.AsyncClient(timeout=30.0) as client:
             # Fetch the index.json
-            response = await client.get(str(mirror.url))
+            response = await client.get(url_str)
             response.raise_for_status()
             index_data = response.json()
             
