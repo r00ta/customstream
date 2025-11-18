@@ -93,6 +93,8 @@ async def fetch_upstream(mirror: UpstreamMirror):
         
         async with httpx.AsyncClient(timeout=30.0) as client:
             # Fetch the index.json
+            # Note: This intentionally makes requests to user-provided URLs (upstream mirrors)
+            # SSRF mitigation: localhost and private IP ranges are blocked above
             response = await client.get(url_str)
             response.raise_for_status()
             index_data = response.json()
