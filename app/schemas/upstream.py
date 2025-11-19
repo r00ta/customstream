@@ -51,7 +51,15 @@ class MirrorRequest(BaseModel):
 
 
 class MirrorResult(BaseModel):
-    """Result of a mirroring request."""
+    """Result of scheduling a mirroring request."""
 
-    mirrored_image_ids: list[int]
-    failed: list[str] = []
+    enqueued: list[str]
+    skipped: list[str] = []
+
+    @property
+    def enqueued_count(self) -> int:
+        return len(self.enqueued)
+
+    @property
+    def skipped_count(self) -> int:
+        return len(self.skipped)

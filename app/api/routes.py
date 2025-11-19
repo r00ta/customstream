@@ -12,6 +12,9 @@ from app.schemas.upstream import MirrorRequest, MirrorResult, UpstreamProduct, U
 from app.services import custom as custom_service
 from app.services import mirror as mirror_service
 from app.services import upstream as upstream_service
+from app.services.mirror_job import run_mirror_job
+from app.services.task_runner import schedule_background_task
+from app.utils.enums import ImageStatus
 
 router = APIRouter(prefix="/api")
 
@@ -38,11 +41,27 @@ async def list_upstream_products(stream_id: str, index_url: str) -> list[Upstrea
 
 @router.post("/mirror", response_model=MirrorResult)
 async def mirror_products(payload: MirrorRequest, session: AsyncSession = Depends(get_session)) -> MirrorResult:
-    try:
-        mirrored, failed = await mirror_service.mirror_products(session, payload)
-    except mirror_service.MirrorError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
-    return MirrorResult(mirrored_image_ids=mirrored, failed=failed)
+    enqueued: list[str] = []
+    skipped: list[str] = []
+
+    for product_id in payload.product_ids:
+        active = await session.scalar(
+            select(Image).where(
+                Image.product_id == product_id,
+                Image.status == ImageStatus.MIRRORING.value,
+            )
+        )
+        if active:
+            skipped.append(f"{product_id} (already mirroring)")
+            continue
+
+        schedule_background_task(run_mirror_job(str(payload.index_url), product_id))
+        enqueued.append(product_id)
+
+    if not enqueued and not skipped:
+        raise HTTPException(status_code=400, detail="No products selected for mirroring")
+
+    return MirrorResult(enqueued=enqueued, skipped=skipped)
 
 
 @router.get("/images", response_model=ImageList)
@@ -140,6 +159,9 @@ def _serialize_image(image: Image) -> ImageOut:
     subarches = meta.get("subarches")
     if subarches is not None:
         subarches = str(subarches)
+    status_detail = None
+    if image.status != ImageStatus.READY.value:
+        status_detail = meta.get("error") or meta.get("status_detail")
     return ImageOut(
         id=image.id,
         product_id=image.product_id,
@@ -148,6 +170,7 @@ def _serialize_image(image: Image) -> ImageOut:
         stream_path=stream.path if stream else "",
         image_type=image.image_type,
         status=image.status,
+        status_detail=status_detail,
         origin_product_url=image.origin_product_url,
         origin_index_url=image.origin_index_url,
         os=image.os,

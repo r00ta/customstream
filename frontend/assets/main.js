@@ -4,6 +4,11 @@ const state = {
   products: new Map(),
   selectedStream: null,
   selectedProducts: new Set(),
+  productFilter: "",
+  productPage: 1,
+  productPageSize: 10,
+  libraryRefreshHandle: null,
+  isRefreshingLibrary: false,
 };
 
 const panels = document.querySelectorAll("section[data-tab-panel]");
@@ -13,7 +18,7 @@ const notificationTitle = document.getElementById("notification-title");
 const notificationBody = document.getElementById("notification-body");
 
 function showNotification(title, message, tone = "positive") {
-  notification.className = `p-notification--${tone}`;
+  notification.className = `p-notification p-notification--${tone}`;
   notificationTitle.textContent = title;
   notificationBody.textContent = message;
   notification.classList.remove("u-hide");
@@ -53,6 +58,66 @@ function validateCustomForm(form) {
     return false;
   }
   return true;
+}
+
+function renderStatusBadge(status, detail) {
+  const normalized = (status || "").toLowerCase();
+  const tone = {
+    ready: "positive",
+    mirroring: "information",
+    pending: "caution",
+    error: "negative",
+  }[normalized] || "information";
+
+  const label = {
+    ready: "Ready",
+    mirroring: "Mirroring",
+    pending: "Pending",
+    error: "Error",
+  }[normalized] || status || "Unknown";
+
+  const detailClass = normalized === "error" ? "status-detail status-detail--error" : "status-detail";
+  const detailHtml = detail ? `<span class="${detailClass}">${detail}</span>` : "";
+  return `<span class="p-badge p-badge--${tone}">${label}</span>${detailHtml}`;
+}
+
+function ensureLibraryPolling(pending) {
+  if (pending && !state.libraryRefreshHandle) {
+    state.libraryRefreshHandle = setInterval(() => {
+      refreshLibrary(true);
+    }, 5000);
+  }
+
+  if (!pending && state.libraryRefreshHandle) {
+    clearInterval(state.libraryRefreshHandle);
+    state.libraryRefreshHandle = null;
+  }
+}
+
+function getFilteredProducts() {
+  if (!state.selectedStream) {
+    return [];
+  }
+  const products = state.products.get(state.selectedStream) ?? [];
+  if (!state.productFilter) {
+    return products;
+  }
+  const query = state.productFilter.toLowerCase();
+  return products.filter((product) => {
+    const haystack = [
+      product.product_id,
+      product.os,
+      product.release,
+      product.version,
+      product.arch,
+      product.subarch,
+      product.label,
+    ]
+      .filter(Boolean)
+      .join(" ")
+      .toLowerCase();
+    return haystack.includes(query);
+  });
 }
 
 function switchTab(target) {
@@ -122,6 +187,12 @@ async function loadProducts(streamId) {
     state.products.set(streamId, products);
     state.selectedStream = streamId;
     state.selectedProducts.clear();
+    state.productFilter = "";
+    state.productPage = 1;
+    const filterInput = document.getElementById("product-filter");
+    if (filterInput) {
+      filterInput.value = "";
+    }
     renderProducts();
     switchTab("mirror");
   } catch (error) {
@@ -134,28 +205,67 @@ function renderProducts() {
   const title = document.getElementById("products-title");
   const body = document.getElementById("products-table-body");
   const toggleAll = document.getElementById("toggle-all");
+  const summary = document.getElementById("products-summary");
+  const pageIndicator = document.getElementById("products-page-indicator");
+  const prevButton = document.getElementById("products-page-prev");
+  const nextButton = document.getElementById("products-page-next");
 
   body.innerHTML = "";
   toggleAll.checked = false;
+  toggleAll.indeterminate = false;
 
   if (!state.selectedStream) {
     title.textContent = "Products";
+    summary.textContent = "Select a stream to view products.";
     body.innerHTML = "<tr><td colspan='5'>Select a stream to view products.</td></tr>";
+    pageIndicator.textContent = "";
+    prevButton.disabled = true;
+    nextButton.disabled = true;
     return;
   }
 
-  const products = state.products.get(state.selectedStream) ?? [];
+  const filtered = getFilteredProducts();
+  const products = filtered;
   title.textContent = `Products in ${state.selectedStream}`;
 
   if (!products.length) {
+    summary.textContent = state.productFilter
+      ? "No products match your filters."
+      : "No products available for this stream.";
     body.innerHTML = "<tr><td colspan='5'>No products available.</td></tr>";
+    pageIndicator.textContent = "";
+    prevButton.disabled = true;
+    nextButton.disabled = true;
     return;
   }
 
-  products.forEach((product) => {
+  const total = products.length;
+  const pageSize = state.productPageSize;
+  const pages = Math.max(1, Math.ceil(total / pageSize));
+  if (state.productPage > pages) {
+    state.productPage = pages;
+  }
+  if (state.productPage < 1) {
+    state.productPage = 1;
+  }
+
+  const start = (state.productPage - 1) * pageSize;
+  const visible = products.slice(start, start + pageSize);
+
+  const selectedOnPage = visible.filter((product) => state.selectedProducts.has(product.product_id)).length;
+  summary.textContent = `Showing ${start + 1}-${start + visible.length} of ${total} product(s). Selected: ${state.selectedProducts.size}`;
+  pageIndicator.textContent = `Page ${state.productPage} of ${pages}`;
+  prevButton.disabled = state.productPage <= 1;
+  nextButton.disabled = state.productPage >= pages;
+  toggleAll.checked = visible.length > 0 && selectedOnPage === visible.length;
+  toggleAll.indeterminate = selectedOnPage > 0 && selectedOnPage < visible.length;
+
+  visible.forEach((product) => {
     const row = document.createElement("tr");
     row.innerHTML = `
-      <td><input type="checkbox" data-product="${product.product_id}" /></td>
+      <td><input type="checkbox" data-product="${product.product_id}" ${
+        state.selectedProducts.has(product.product_id) ? "checked" : ""
+      } /></td>
       <td><code>${product.product_id}</code></td>
       <td>${product.os ?? ""}</td>
       <td>${product.release ?? ""}</td>
@@ -171,21 +281,31 @@ function renderProducts() {
         state.selectedProducts.add(id);
       } else {
         state.selectedProducts.delete(id);
-        toggleAll.checked = false;
       }
+      window.requestAnimationFrame(() => renderProducts());
     });
   });
 
-  toggleAll.addEventListener("change", () => {
-    const isChecked = toggleAll.checked;
-    state.selectedProducts.clear();
-    body.querySelectorAll("input[type='checkbox']").forEach((checkbox) => {
-      checkbox.checked = isChecked;
-      if (isChecked) {
-        state.selectedProducts.add(checkbox.dataset.product);
+  if (!toggleAll.dataset.bound) {
+    toggleAll.addEventListener("change", () => {
+      const isChecked = toggleAll.checked;
+      if (!isChecked) {
+        body.querySelectorAll("input[type='checkbox']").forEach((checkbox) => {
+          checkbox.checked = false;
+          state.selectedProducts.delete(checkbox.dataset.product);
+        });
+        window.requestAnimationFrame(() => renderProducts());
+        return;
       }
+
+      body.querySelectorAll("input[type='checkbox']").forEach((checkbox) => {
+        checkbox.checked = true;
+        state.selectedProducts.add(checkbox.dataset.product);
+      });
+      window.requestAnimationFrame(() => renderProducts());
     });
-  });
+    toggleAll.dataset.bound = "true";
+  }
 }
 
 async function mirrorSelected() {
@@ -193,6 +313,10 @@ async function mirrorSelected() {
     showNotification("No products selected", "Select at least one product to mirror.", "negative");
     return;
   }
+
+  const form = document.getElementById("mirror-form");
+  setFormBusy(form, true);
+
   try {
     const response = await fetch("/api/mirror", {
       method: "POST",
@@ -207,26 +331,39 @@ async function mirrorSelected() {
       throw new Error(details.detail ?? `Mirroring failed (${response.status})`);
     }
     const result = await response.json();
-    const successCount = result.mirrored_image_ids.length;
-    const failureCount = result.failed.length;
-    let message = `${successCount} image(s) mirrored.`;
-    if (failureCount) {
-      message += ` ${failureCount} item(s) failed.`;
-      console.warn(result.failed);
+    const enqueued = result.enqueued ?? [];
+    const skipped = result.skipped ?? [];
+    let message = `${enqueued.length} image(s) queued for mirroring.`;
+    if (skipped.length) {
+      message += ` ${skipped.length} item(s) skipped.`;
+      console.warn(skipped);
     }
-    showNotification("Mirror complete", message, failureCount ? "caution" : "positive");
+    showNotification("Mirror scheduled", message, skipped.length ? "caution" : "positive");
     state.selectedProducts.clear();
     document.getElementById("mirror-form").reset();
+    state.productPage = 1;
+    renderProducts();
     await refreshLibrary();
+    ensureLibraryPolling(true);
   } catch (error) {
     console.error(error);
     showNotification("Mirror failed", error.message, "negative");
+  } finally {
+    setFormBusy(form, false);
   }
 }
 
-async function refreshLibrary() {
+async function refreshLibrary(silent = false) {
+  if (state.isRefreshingLibrary) {
+    return;
+  }
+  state.isRefreshingLibrary = true;
+
   const table = document.getElementById("library-table-body");
-  table.innerHTML = "<tr><td colspan='10'>Loading…</td></tr>";
+  if (!silent) {
+    table.innerHTML = "<tr><td colspan='11'>Loading…</td></tr>";
+  }
+
   try {
     const response = await fetch("/api/images");
     if (!response.ok) {
@@ -234,20 +371,31 @@ async function refreshLibrary() {
     }
     const data = await response.json();
     table.innerHTML = "";
+
     if (!data.items.length) {
-      table.innerHTML = "<tr><td colspan='10'>No images mirrored yet.</td></tr>";
+      table.innerHTML = "<tr><td colspan='11'>No images mirrored yet.</td></tr>";
+      ensureLibraryPolling(false);
       return;
     }
+
+    let hasPending = false;
+
     data.items.forEach((image) => {
-  const versionText = image.version ? ` (${image.version})` : "";
-  const subarches = image.subarches ?? "";
+      const versionText = image.version ? ` (${image.version})` : "";
+      const subarches = image.subarches ?? "";
       const kernelParts = [image.kflavor, image.krel].filter(Boolean);
       const kernelSummary = kernelParts.join(" • ");
+      const statusBadge = renderStatusBadge(image.status, image.status_detail);
+      if ((image.status || "").toLowerCase() !== "ready") {
+        hasPending = true;
+      }
+
       const row = document.createElement("tr");
       row.innerHTML = `
         <td>${image.name}</td>
         <td><code>${image.product_id}</code></td>
         <td>${image.image_type}</td>
+        <td>${statusBadge}</td>
         <td>${image.release ?? ""}${versionText}</td>
         <td>${image.release_codename ?? ""}</td>
         <td>${image.arch ?? ""}</td>
@@ -265,6 +413,7 @@ async function refreshLibrary() {
       `;
       table.appendChild(row);
     });
+
     table.querySelectorAll("button[data-delete]").forEach((button) => {
       button.addEventListener("click", async () => {
         const id = button.dataset.delete;
@@ -274,9 +423,13 @@ async function refreshLibrary() {
         await deleteImage(id);
       });
     });
+
+    ensureLibraryPolling(hasPending);
   } catch (error) {
     console.error(error);
     showNotification("Unable to load library", error.message, "negative");
+  } finally {
+    state.isRefreshingLibrary = false;
   }
 }
 
@@ -346,6 +499,31 @@ document.getElementById("upstream-form").addEventListener("submit", (event) => {
   loadStreams(indexUrl);
 });
 
+document.getElementById("product-filter").addEventListener("input", (event) => {
+  state.productFilter = event.target.value;
+  state.productPage = 1;
+  renderProducts();
+});
+
+document.getElementById("product-page-size").addEventListener("change", (event) => {
+  const value = Number.parseInt(event.target.value, 10);
+  state.productPageSize = Number.isNaN(value) || value <= 0 ? 10 : value;
+  state.productPage = 1;
+  renderProducts();
+});
+
+document.getElementById("products-page-prev").addEventListener("click", () => {
+  if (state.productPage > 1) {
+    state.productPage -= 1;
+    renderProducts();
+  }
+});
+
+document.getElementById("products-page-next").addEventListener("click", () => {
+  state.productPage += 1;
+  renderProducts();
+});
+
 document.getElementById("mirror-form").addEventListener("submit", (event) => {
   event.preventDefault();
   mirrorSelected();
@@ -357,6 +535,8 @@ document.getElementById("clear-selection").addEventListener("click", () => {
     .querySelectorAll("#products-table-body input[type='checkbox']")
     .forEach((checkbox) => (checkbox.checked = false));
   document.getElementById("toggle-all").checked = false;
+  document.getElementById("toggle-all").indeterminate = false;
+  renderProducts();
 });
 
 document.getElementById("custom-form").addEventListener("submit", submitCustomForm);

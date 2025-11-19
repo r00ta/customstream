@@ -12,6 +12,7 @@ from sqlalchemy.orm import selectinload
 
 from app.core.config import get_settings
 from app.models import Image, Stream
+from app.utils.enums import ImageStatus
 
 settings = get_settings()
 
@@ -44,25 +45,26 @@ async def rebuild_simplestream_files(session: AsyncSession) -> None:
     }
 
     for stream in streams:
-        if not stream.images:
+        ready_images = [image for image in stream.images if image.status == ImageStatus.READY.value]
+        if not ready_images:
             continue
         content_id = stream.stream_id
         index_payload["index"][stream.stream_id] = {
             "datatype": stream.datatype,
             "format": stream.format,
             "path": stream.path,
-            "products": sorted(image.product_id for image in stream.images),
+            "products": sorted(image.product_id for image in ready_images),
             "updated": _now_rfc1123(),
             "content_id": content_id,
         }
-        await _write_stream_products(stream, content_id)
+        await _write_stream_products(stream, content_id, ready_images)
 
     index_file = _storage_path("streams", "v1", "index.json")
     index_file.parent.mkdir(parents=True, exist_ok=True)
     index_file.write_text(json.dumps(index_payload, indent=2), encoding="utf-8")
 
 
-async def _write_stream_products(stream: Stream, content_id: str) -> None:
+async def _write_stream_products(stream: Stream, content_id: str, images: list[Image]) -> None:
     """Write the product file representing all images inside a stream."""
 
     products_payload: dict[str, Any] = {
@@ -73,7 +75,7 @@ async def _write_stream_products(stream: Stream, content_id: str) -> None:
         "content_id": content_id,
     }
 
-    for image in sorted(stream.images, key=lambda item: item.product_id):
+    for image in sorted(images, key=lambda item: item.product_id):
         entry = deepcopy(image.meta or {})
         if not entry:
             continue

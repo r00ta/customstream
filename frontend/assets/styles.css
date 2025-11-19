@@ -2,24 +2,60 @@ body {
   background: #f7f7f7;
 }
 
-section[data-tab-panel] {
+.navigation-card {
+  margin-bottom: 2rem;
+}
+
+.tab-panel {
   margin-top: 2rem;
 }
 
-section[data-tab-panel].u-hide {
+.tab-panel.u-hide {
   display: none;
 }
 
-#products-panel {
-  margin-top: 1.5rem;
-}
-
 #notification {
-  margin-top: 1rem;
+  margin-bottom: 1.5rem;
 }
 
 #notification.u-hide {
   display: none;
+}
+
+.p-card__content {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.products-panel {
+  margin-top: 2rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.products-panel__header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  flex-wrap: wrap;
+  gap: 1.5rem;
+}
+
+.products-summary {
+  margin: 0.5rem 0 0;
+  color: #666;
+}
+
+.products-controls {
+  display: flex;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.products-controls .p-form__group {
+  margin-bottom: 0;
 }
 
 .form-row {
@@ -29,22 +65,6 @@ section[data-tab-panel].u-hide {
 
 .form-row:last-of-type {
   margin-bottom: 0;
-}
-
-.p-table table {
-  min-width: 100%;
-}
-
-.p-card__content {
-  display: flex;
-  flex-direction: column;
-  gap: 1.5rem;
-}
-
-.p-button-group {
-  display: flex;
-  gap: 1rem;
-  flex-wrap: wrap;
 }
 
 .p-form__group fieldset,
@@ -57,4 +77,80 @@ fieldset.p-form__group {
 .p-form__group fieldset legend,
 fieldset.p-form__group legend {
   font-weight: 600;
+}
+
+.p-table table {
+  min-width: 100%;
+}
+
+.table-scroll {
+  overflow: auto;
+}
+
+.library-table {
+  max-height: none;
+}
+
+.library-table table {
+  font-size: 1.05rem;
+  line-height: 1.6;
+}
+
+.library-table th,
+.library-table td {
+  padding: 0.85rem 1rem;
+}
+
+.selection-column {
+  width: 3rem;
+}
+
+.mirror-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 1rem;
+  margin-top: 1rem;
+}
+
+.mirror-pagination {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.pagination-indicator {
+  font-weight: 500;
+}
+
+.p-button-group {
+  display: flex;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.info-card code {
+  display: inline-block;
+  margin: 0.5rem 0 1rem;
+}
+
+.p-badge {
+  vertical-align: middle;
+}
+
+.status-detail {
+  display: inline-block;
+  margin-left: 0.75rem;
+  font-size: 0.85rem;
+  color: #666;
+}
+
+.status-detail--error {
+  color: #d04141;
+}
+
+.status-detail::before {
+  content: "•";
+  margin-right: 0.5rem;
 }

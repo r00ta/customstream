@@ -24,6 +24,7 @@ class ImageOut(BaseModel):
     stream_path: str
     image_type: str
     status: str
+    status_detail: str | None = None
     origin_product_url: str | None = None
     origin_index_url: str | None = None
 
