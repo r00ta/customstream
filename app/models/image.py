@@ -36,7 +36,9 @@ class Image(Base, TimestampMixin):
 
     stream: Mapped["Stream"] = relationship(back_populates="images")
     artifacts: Mapped[List["Artifact"]] = relationship(back_populates="image", cascade="all, delete-orphan")
+    mirror_job: Mapped[Optional["MirrorJob"]] = relationship(back_populates="image", uselist=False)
 
 
 from app.models.stream import Stream  # noqa: E402
 from app.models.artifact import Artifact  # noqa: E402
+from app.models.mirror_job import MirrorJob  # noqa: E402

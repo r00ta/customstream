@@ -2,18 +2,19 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from sqlalchemy import select
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.core.database import get_db_session
-from app.models import Image
+from app.models import Image, MirrorJob
 from app.schemas.image import ArtifactOut, ImageList, ImageOut
-from app.schemas.upstream import MirrorRequest, MirrorResult, UpstreamProduct, UpstreamStream
+from app.schemas.job import MirrorJobList, MirrorJobOut
+from app.schemas.upstream import MirrorJobSummary, MirrorRequest, MirrorResult, UpstreamProduct, UpstreamStream
 from app.services import custom as custom_service
 from app.services import mirror as mirror_service
 from app.services import upstream as upstream_service
-from app.services.mirror_job import run_mirror_job
-from app.services.task_runner import schedule_background_task
+from app.services import mirror_job as mirror_job_service
 from app.utils.enums import ImageStatus
 
 router = APIRouter(prefix="/api")
@@ -41,27 +42,49 @@ async def list_upstream_products(stream_id: str, index_url: str) -> list[Upstrea
 
 @router.post("/mirror", response_model=MirrorResult)
 async def mirror_products(payload: MirrorRequest, session: AsyncSession = Depends(get_session)) -> MirrorResult:
-    enqueued: list[str] = []
+    enqueued_products: list[str] = []
     skipped: list[str] = []
+    job_summaries: list[MirrorJobSummary] = []
 
     for product_id in payload.product_ids:
-        active = await session.scalar(
+        active_image = await session.scalar(
             select(Image).where(
                 Image.product_id == product_id,
                 Image.status == ImageStatus.MIRRORING.value,
             )
         )
-        if active:
+        if active_image:
             skipped.append(f"{product_id} (already mirroring)")
             continue
 
-        schedule_background_task(run_mirror_job(str(payload.index_url), product_id))
-        enqueued.append(product_id)
+        job = await mirror_job_service.find_active_job(session, product_id)
+        if job:
+            skipped.append(f"{product_id} (already queued)")
+            continue
 
-    if not enqueued and not skipped:
+        job = await mirror_job_service.enqueue_job(session, str(payload.index_url), product_id)
+        enqueued_products.append(product_id)
+        job_summaries.append(MirrorJobSummary(job_id=job.id, product_id=job.product_id))
+
+    if not enqueued_products and not skipped:
         raise HTTPException(status_code=400, detail="No products selected for mirroring")
 
-    return MirrorResult(enqueued=enqueued, skipped=skipped)
+    if enqueued_products:
+        try:
+            await session.commit()
+        except SQLAlchemyError as exc:
+            await session.rollback()
+            raise HTTPException(status_code=500, detail="Failed to enqueue mirror jobs") from exc
+        mirror_job_service.trigger_job_runner()
+
+    return MirrorResult(enqueued=enqueued_products, skipped=skipped, jobs=job_summaries)
+
+
+@router.get("/mirror/jobs", response_model=MirrorJobList)
+async def list_mirror_jobs(session: AsyncSession = Depends(get_session)) -> MirrorJobList:
+    result = await session.execute(select(MirrorJob).order_by(MirrorJob.created_at.desc()).limit(10))
+    jobs = result.scalars().all()
+    return MirrorJobList(items=[_serialize_job(job) for job in jobs])
 
 
 @router.get("/images", response_model=ImageList)
@@ -187,4 +210,20 @@ def _serialize_image(image: Image) -> ImageOut:
         artifacts=artifacts,
         created_at=image.created_at,
         updated_at=image.updated_at,
+    )
+
+
+def _serialize_job(job: MirrorJob) -> MirrorJobOut:
+    return MirrorJobOut(
+        id=job.id,
+        product_id=job.product_id,
+        index_url=job.index_url,
+        status=job.status,
+        message=job.message,
+        progress=job.progress,
+        image_id=job.image_id,
+        created_at=job.created_at,
+        updated_at=job.updated_at,
+        started_at=job.started_at,
+        finished_at=job.finished_at,
     )

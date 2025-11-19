@@ -7,6 +7,7 @@ from fastapi.staticfiles import StaticFiles
 from app.api.routes import router as api_router
 from app.core.config import get_settings
 from app.core.database import init_db
+from app.services import mirror_job as mirror_job_service
 
 settings = get_settings()
 
@@ -16,6 +17,7 @@ app = FastAPI(title=settings.app_name)
 @app.on_event("startup")
 async def startup_event() -> None:
     await init_db()
+    await mirror_job_service.resume_pending_jobs()
 
 
 app.add_middleware(

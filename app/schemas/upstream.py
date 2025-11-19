@@ -50,11 +50,19 @@ class MirrorRequest(BaseModel):
     }
 
 
+class MirrorJobSummary(BaseModel):
+    """Summary information about an enqueued mirror job."""
+
+    job_id: int
+    product_id: str
+
+
 class MirrorResult(BaseModel):
     """Result of scheduling a mirroring request."""
 
     enqueued: list[str]
     skipped: list[str] = []
+    jobs: list[MirrorJobSummary] = []
 
     @property
     def enqueued_count(self) -> int:

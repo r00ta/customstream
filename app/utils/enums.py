@@ -15,3 +15,12 @@ class ImageStatus(str, Enum):
     MIRRORING = "mirroring"
     READY = "ready"
     ERROR = "error"
+
+
+class JobStatus(str, Enum):
+    """Lifecycle states for background mirror jobs."""
+
+    QUEUED = "queued"
+    RUNNING = "running"
+    COMPLETED = "completed"
+    FAILED = "failed"

@@ -293,6 +293,33 @@
         <section class="tab-panel u-hide" data-tab-panel="library">
           <div class="p-card">
             <div class="p-card__header">
+              <h2 class="p-heading--three">Mirror job queue</h2>
+              <p class="u-text--muted">
+                Track queued, running, and recently completed mirror operations. Entries update automatically while work is in progress.
+              </p>
+            </div>
+            <div class="p-card__content">
+              <div class="p-table table-scroll">
+                <table>
+                  <thead>
+                    <tr>
+                      <th scope="col">Job</th>
+                      <th scope="col">Product ID</th>
+                      <th scope="col">Status</th>
+                      <th scope="col">Progress</th>
+                      <th scope="col">Created</th>
+                      <th scope="col">Started</th>
+                      <th scope="col">Finished</th>
+                    </tr>
+                  </thead>
+                  <tbody id="jobs-table-body"></tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+
+          <div class="p-card">
+            <div class="p-card__header">
               <h2 class="p-heading--three">Local simplestream library</h2>
               <p class="u-text--muted">
                 Review the images currently published by this service. Pending mirrors refresh automatically.

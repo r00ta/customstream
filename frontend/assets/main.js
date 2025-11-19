@@ -7,8 +7,12 @@ const state = {
   productFilter: "",
   productPage: 1,
   productPageSize: 10,
+  jobs: [],
   libraryRefreshHandle: null,
   isRefreshingLibrary: false,
+  isRefreshingJobs: false,
+  lastLibraryPending: false,
+  lastJobsPending: false,
 };
 
 const panels = document.querySelectorAll("section[data-tab-panel]");
@@ -67,6 +71,10 @@ function renderStatusBadge(status, detail) {
     mirroring: "information",
     pending: "caution",
     error: "negative",
+    queued: "caution",
+    running: "information",
+    completed: "positive",
+    failed: "negative",
   }[normalized] || "information";
 
   const label = {
@@ -74,17 +82,40 @@ function renderStatusBadge(status, detail) {
     mirroring: "Mirroring",
     pending: "Pending",
     error: "Error",
+    queued: "Queued",
+    running: "Running",
+    completed: "Completed",
+    failed: "Failed",
   }[normalized] || status || "Unknown";
 
-  const detailClass = normalized === "error" ? "status-detail status-detail--error" : "status-detail";
+  const detailClass = normalized === "error" || normalized === "failed" ? "status-detail status-detail--error" : "status-detail";
   const detailHtml = detail ? `<span class="${detailClass}">${detail}</span>` : "";
   return `<span class="p-badge p-badge--${tone}">${label}</span>${detailHtml}`;
+}
+
+function formatDateTime(value) {
+  if (!value) {
+    return "—";
+  }
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return value;
+  }
+  return date.toLocaleString();
 }
 
 function ensureLibraryPolling(pending) {
   if (pending && !state.libraryRefreshHandle) {
     state.libraryRefreshHandle = setInterval(() => {
-      refreshLibrary(true);
+      Promise.all([refreshLibrary(true), refreshJobs(true)])
+        .then(([libraryPending, jobsPending]) => {
+          if (!libraryPending && !jobsPending) {
+            ensureLibraryPolling(false);
+          }
+        })
+        .catch((error) => {
+          console.error(error);
+        });
     }, 5000);
   }
 
@@ -333,7 +364,12 @@ async function mirrorSelected() {
     const result = await response.json();
     const enqueued = result.enqueued ?? [];
     const skipped = result.skipped ?? [];
+    const jobs = result.jobs ?? [];
     let message = `${enqueued.length} image(s) queued for mirroring.`;
+    if (jobs.length) {
+      const identifiers = jobs.map((job) => `#${job.job_id}`).join(", ");
+      message += ` Jobs: ${identifiers}.`;
+    }
     if (skipped.length) {
       message += ` ${skipped.length} item(s) skipped.`;
       console.warn(skipped);
@@ -343,8 +379,8 @@ async function mirrorSelected() {
     document.getElementById("mirror-form").reset();
     state.productPage = 1;
     renderProducts();
-    await refreshLibrary();
-    ensureLibraryPolling(true);
+  const [libraryPending, jobsPending] = await Promise.all([refreshLibrary(), refreshJobs()]);
+  ensureLibraryPolling(Boolean(libraryPending || jobsPending));
   } catch (error) {
     console.error(error);
     showNotification("Mirror failed", error.message, "negative");
@@ -355,7 +391,7 @@ async function mirrorSelected() {
 
 async function refreshLibrary(silent = false) {
   if (state.isRefreshingLibrary) {
-    return;
+    return state.lastLibraryPending;
   }
   state.isRefreshingLibrary = true;
 
@@ -374,8 +410,8 @@ async function refreshLibrary(silent = false) {
 
     if (!data.items.length) {
       table.innerHTML = "<tr><td colspan='11'>No images mirrored yet.</td></tr>";
-      ensureLibraryPolling(false);
-      return;
+      state.lastLibraryPending = false;
+      return false;
     }
 
     let hasPending = false;
@@ -423,13 +459,98 @@ async function refreshLibrary(silent = false) {
         await deleteImage(id);
       });
     });
-
-    ensureLibraryPolling(hasPending);
+    state.lastLibraryPending = hasPending;
+    return hasPending;
   } catch (error) {
     console.error(error);
-    showNotification("Unable to load library", error.message, "negative");
+    if (!silent) {
+      table.innerHTML = `<tr><td colspan='11'>${error.message}</td></tr>`;
+      showNotification("Unable to load library", error.message, "negative");
+    }
+    state.lastLibraryPending = true;
+    return true;
   } finally {
     state.isRefreshingLibrary = false;
+  }
+}
+
+async function refreshJobs(silent = false) {
+  if (state.isRefreshingJobs) {
+    return state.lastJobsPending;
+  }
+  state.isRefreshingJobs = true;
+
+  const table = document.getElementById("jobs-table-body");
+  if (!table) {
+    state.isRefreshingJobs = false;
+    return state.lastJobsPending;
+  }
+
+  if (!silent) {
+    table.innerHTML = "<tr><td colspan='7'>Loading…</td></tr>";
+  }
+
+  try {
+    const response = await fetch("/api/mirror/jobs");
+    if (!response.ok) {
+      throw new Error(`Failed to load mirror jobs (${response.status})`);
+    }
+
+    const data = await response.json();
+    const items = data.items ?? [];
+    table.innerHTML = "";
+
+    if (!items.length) {
+      table.innerHTML = "<tr><td colspan='7'>No mirror jobs yet.</td></tr>";
+      state.jobs = [];
+      state.lastJobsPending = false;
+      return false;
+    }
+
+    let hasPending = false;
+
+    items.forEach((job) => {
+      const statusValue = (job.status || "").toLowerCase();
+      if (statusValue === "queued" || statusValue === "running") {
+        hasPending = true;
+      }
+
+      const statusBadge = renderStatusBadge(job.status, job.message);
+      const hasProgress = job.progress !== null && job.progress !== undefined;
+      let progressText = "—";
+      if (hasProgress) {
+        const numericProgress = Number(job.progress);
+        if (!Number.isNaN(numericProgress)) {
+          progressText = `${Math.max(0, Math.min(100, Math.round(numericProgress)))}%`;
+        }
+      }
+
+      const row = document.createElement("tr");
+      row.innerHTML = `
+        <td>${job.id}</td>
+        <td><code>${job.product_id}</code></td>
+        <td>${statusBadge}</td>
+        <td>${progressText}</td>
+        <td>${formatDateTime(job.created_at)}</td>
+        <td>${formatDateTime(job.started_at)}</td>
+        <td>${formatDateTime(job.finished_at)}</td>
+      `;
+      table.appendChild(row);
+    });
+
+    state.jobs = items;
+    state.lastJobsPending = hasPending;
+    return hasPending;
+  } catch (error) {
+    console.error(error);
+    if (!silent) {
+      table.innerHTML = `<tr><td colspan='7'>${error.message}</td></tr>`;
+      showNotification("Unable to load jobs", error.message, "negative");
+    }
+    state.lastJobsPending = true;
+    return true;
+  } finally {
+    state.isRefreshingJobs = false;
   }
 }
 
@@ -440,7 +561,8 @@ async function deleteImage(id) {
       throw new Error(`Failed to delete image (${response.status})`);
     }
     showNotification("Image removed", "The image and its artifacts were deleted.");
-    await refreshLibrary();
+    const [libraryPending, jobsPending] = await Promise.all([refreshLibrary(), refreshJobs()]);
+    ensureLibraryPolling(Boolean(libraryPending || jobsPending));
   } catch (error) {
     console.error(error);
     showNotification("Deletion failed", error.message, "negative");
@@ -468,7 +590,8 @@ async function submitCustomForm(event) {
     form.reset();
     showNotification("Custom image published", "The simplestream metadata has been updated.");
     switchTab("library");
-    await refreshLibrary();
+  const [libraryPending, jobsPending] = await Promise.all([refreshLibrary(), refreshJobs()]);
+  ensureLibraryPolling(Boolean(libraryPending || jobsPending));
   } catch (error) {
     console.error(error);
     showNotification("Upload failed", error.message, "negative");
@@ -543,5 +666,7 @@ document.getElementById("custom-form").addEventListener("submit", submitCustomFo
 
 // Initial load
 loadStreams(state.indexUrl);
-refreshLibrary();
+Promise.all([refreshLibrary(), refreshJobs()]).then(([libraryPending, jobsPending]) => {
+  ensureLibraryPolling(Boolean(libraryPending || jobsPending));
+});
 loadSimplestreamInfo();
