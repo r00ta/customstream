@@ -786,24 +786,76 @@ async function submitCustomForm(event) {
   if (!validateCustomForm(form)) {
     return;
   }
+  
   setFormBusy(form, true);
+  const progressContainer = document.getElementById("upload-progress-container");
+  const progressBar = document.getElementById("upload-progress-bar");
+  const progressText = document.getElementById("upload-progress-text");
+  
+  // Show progress UI
+  progressContainer.classList.remove("u-hide");
+  progressBar.style.width = "0%";
+  progressText.textContent = "Preparing upload...";
+  
   try {
-    const response = await fetch("/api/custom/images", {
-      method: "POST",
-      body: formData,
+    // Use XMLHttpRequest for progress tracking
+    const result = await new Promise((resolve, reject) => {
+      const xhr = new XMLHttpRequest();
+      
+      xhr.upload.addEventListener("progress", (e) => {
+        if (e.lengthComputable) {
+          const percentComplete = (e.loaded / e.total) * 100;
+          progressBar.style.width = percentComplete + "%";
+          
+          if (percentComplete < 100) {
+            const mbLoaded = (e.loaded / 1024 / 1024).toFixed(1);
+            const mbTotal = (e.total / 1024 / 1024).toFixed(1);
+            progressText.textContent = `Uploading: ${mbLoaded} MB / ${mbTotal} MB (${Math.round(percentComplete)}%)`;
+          } else {
+            progressText.textContent = "Processing upload...";
+          }
+        }
+      });
+      
+      xhr.addEventListener("load", () => {
+        if (xhr.status >= 200 && xhr.status < 300) {
+          try {
+            const data = JSON.parse(xhr.responseText);
+            resolve(data);
+          } catch (e) {
+            resolve({});
+          }
+        } else {
+          try {
+            const details = JSON.parse(xhr.responseText);
+            reject(new Error(details.detail ?? `Upload failed (${xhr.status})`));
+          } catch (e) {
+            reject(new Error(`Upload failed (${xhr.status})`));
+          }
+        }
+      });
+      
+      xhr.addEventListener("error", () => {
+        reject(new Error("Network error during upload"));
+      });
+      
+      xhr.addEventListener("abort", () => {
+        reject(new Error("Upload cancelled"));
+      });
+      
+      xhr.open("POST", "/api/custom/images");
+      xhr.send(formData);
     });
-    if (!response.ok) {
-      const details = await response.json().catch(() => ({}));
-      throw new Error(details.detail ?? `Upload failed (${response.status})`);
-    }
-    await response.json();
+    
     form.reset();
+    progressContainer.classList.add("u-hide");
     showNotification("Custom image published", "The simplestream metadata has been updated.");
     switchTab("library");
     const [libraryPending, jobsPending] = await Promise.all([refreshLibrary(), refreshJobs()]);
     ensureLibraryPolling(Boolean(libraryPending || jobsPending));
   } catch (error) {
     console.error(error);
+    progressContainer.classList.add("u-hide");
     showNotification("Upload failed", error.message, "negative");
   } finally {
     setFormBusy(form, false);

@@ -266,6 +266,19 @@
 
                     <hr />
 
+                    <!-- Upload progress display -->
+                    <div id="upload-progress-container" class="u-hide">
+                      <div class="p-notification p-notification--information">
+                        <div class="p-notification__content">
+                          <h5 class="p-notification__title">Uploading image...</h5>
+                          <p id="upload-progress-text">Preparing upload...</p>
+                          <div class="p-progress-bar" style="margin-top: 0.5rem;">
+                            <div class="p-progress-bar__fill" id="upload-progress-bar" style="width: 0%;"></div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
                     <div class="p-form__group">
                       <div class="p-button-group u-align--right">
                         <button class="p-button--base" type="reset">Reset form</button>
