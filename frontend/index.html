@@ -148,18 +148,18 @@
                     <div class="p-form__group row">
                       <div class="col-6">
                         <label class="p-form__label is-required" for="custom-name">Display name</label>
-                        <input class="p-form__control" id="custom-name" name="name" type="text" required aria-required="true" />
+                        <input class="p-form__control" id="custom-name" name="name" type="text" required aria-required="true" placeholder="Noble"/>
                       </div>
                       <div class="col-6">
                         <label class="p-form__label is-required" for="custom-release">Release</label>
-                        <input class="p-form__control" id="custom-release" name="release" type="text" required aria-required="true" />
+                        <input class="p-form__control" id="custom-release" name="release" type="text" required aria-required="true" placeholder="noble"/>
                       </div>
                     </div>
 
                     <div class="p-form__group row">
                       <div class="col-6">
                         <label class="p-form__label" for="custom-os">Operating system</label>
-                        <input class="p-form__control" id="custom-os" name="os_name" type="text" value="custom" />
+                        <input class="p-form__control" id="custom-os" name="os_name" type="text" placeholder="ubuntu" />
                         <p class="p-form-help-text">This identifier appears in simplestream metadata.</p>
                       </div>
                       <div class="col-6">
@@ -169,7 +169,7 @@
                           id="custom-release-codename"
                           name="release_codename"
                           type="text"
-                          placeholder="e.g., focal, jammy"
+                          placeholder="Noble Numbat"
                         />
                       </div>
                     </div>
@@ -180,7 +180,7 @@
                     <div class="p-form__group row">
                       <div class="col-4">
                         <label class="p-form__label is-required" for="custom-version">Version</label>
-                        <input class="p-form__control" id="custom-version" name="version" type="text" required aria-required="true" />
+                        <input class="p-form__control" id="custom-version" name="version" type="text" required aria-required="true" placeholder="24.04" />
                       </div>
                       <div class="col-4">
                         <label class="p-form__label is-required" for="custom-arch">Architecture</label>
@@ -188,18 +188,18 @@
                       </div>
                       <div class="col-4">
                         <label class="p-form__label" for="custom-subarch">Sub-architecture</label>
-                        <input class="p-form__control" id="custom-subarch" name="subarch" type="text" placeholder="generic" />
+                        <input class="p-form__control" id="custom-subarch" name="subarch" type="text" placeholder="ga-24.04" />
                       </div>
                     </div>
 
                     <div class="p-form__group row">
                       <div class="col-6">
                         <label class="p-form__label" for="custom-kflavor">Kernel flavor</label>
-                        <input class="p-form__control" id="custom-kflavor" name="kflavor" type="text" placeholder="ga" />
+                        <input class="p-form__control" id="custom-kflavor" name="kflavor" type="text" placeholder="generic" />
                       </div>
                       <div class="col-6">
                         <label class="p-form__label" for="custom-krel">Kernel release</label>
-                        <input class="p-form__control" id="custom-krel" name="krel" type="text" placeholder="5.15.0-87" />
+                        <input class="p-form__control" id="custom-krel" name="krel" type="text" placeholder="noble" />
                       </div>
                     </div>
 
@@ -214,7 +214,7 @@
                           id="custom-subarches"
                           name="subarches"
                           type="text"
-                          placeholder="amd64-generic, amd64-highbank"
+                          placeholder="generic, amd64-highbank"
                         />
                         <p class="p-form-help-text">Comma or space separated list exposed in simplestream metadata.</p>
                       </div>
@@ -223,7 +223,7 @@
                     <div class="p-form__group row">
                       <div class="col-6">
                         <label class="p-form__label" for="custom-label">Label</label>
-                        <input class="p-form__control" id="custom-label" name="label" type="text" placeholder="custom" />
+                        <input class="p-form__control" id="custom-label" name="label" type="text" placeholder="stable" />
                       </div>
                       <div class="col-6">
                         <label class="p-form__label" for="custom-description">Description</label>

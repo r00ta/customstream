@@ -1,0 +1,13 @@
+#!/bin/bash
+set -e
+
+echo "CustomStream has been installed!"
+echo ""
+echo "The service is starting on port 8000."
+echo ""
+echo "Access the web interface at: http://localhost:8000"
+echo "Simplestream endpoint: http://localhost:8000/simplestreams/streams/v1/index.json"
+echo ""
+echo "Data is stored in: /var/snap/customstream/common/"
+echo "View logs with: sudo snap logs customstream -f"
+echo ""

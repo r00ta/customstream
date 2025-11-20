@@ -1,0 +1,100 @@
+name: customstream
+base: core22
+version: '0.1.0'
+summary: MAAS simplestream mirroring and custom image manager
+description: |
+  CustomStream is a FastAPI-based service that helps MAAS administrators
+  mirror upstream simplestreams and publish custom OS images.
+  
+  Features:
+  - Browse upstream simplestream indices and inspect streams/products
+  - Mirror MAAS images locally with background job queue
+  - Upload custom kernels, initrds, and root file systems
+  - Serve a fully compliant simplestream endpoint
+  - Modern web UI built with Vanilla Framework
+  
+  After installation, access the web interface at http://localhost:8000
+  and the simplestream endpoint at http://localhost:8000/simplestreams/streams/v1/index.json
+
+grade: stable
+confinement: strict
+
+architectures:
+  - build-on: amd64
+  - build-on: arm64
+
+apps:
+  customstream:
+    command: bin/start-customstream
+    daemon: simple
+    restart-condition: always
+    plugs:
+      - network
+      - network-bind
+    environment:
+      PYTHONPATH: $SNAP/lib/python3.10/site-packages:$SNAP/usr/lib/python3/dist-packages
+      STORAGE_ROOT: $SNAP_COMMON/data/simplestreams
+      DATABASE_URL: sqlite+aiosqlite:///$SNAP_COMMON/customstream.db
+      FRONTEND_ROOT: $SNAP/frontend
+
+parts:
+  customstream:
+    plugin: python
+    source: .
+    python-packages:
+      - fastapi>=0.115.0
+      - uvicorn[standard]>=0.30.6
+      - httpx>=0.27.2
+      - sqlalchemy>=2.0.32
+      - aiosqlite>=0.20.0
+      - pydantic-settings>=2.3.0
+      - python-multipart>=0.0.9
+    stage-packages:
+      - python3-pip
+      - python3-venv
+    build-packages:
+      - python3-dev
+      - build-essential
+    override-build: |
+      craftctl default
+      # Install the application
+      pip install --no-deps --prefix=$CRAFT_PART_INSTALL .
+    organize:
+      lib/python*/site-packages: lib/python3.10/site-packages
+  
+  frontend:
+    plugin: dump
+    source: frontend
+    organize:
+      '*': frontend/
+  
+  launcher:
+    plugin: nil
+    override-build: |
+      mkdir -p $CRAFT_PART_INSTALL/bin
+      cat > $CRAFT_PART_INSTALL/bin/start-customstream <<'EOF'
+      #!/bin/bash
+      set -e
+      
+      # Create data directories
+      mkdir -p $SNAP_COMMON/data/simplestreams/streams/v1
+      mkdir -p $SNAP_COMMON/uploads
+      
+      # Initialize database and start server
+      cd $SNAP
+      exec $SNAP/bin/python3 -m uvicorn app.main:app \
+        --host 0.0.0.0 \
+        --port 8000 \
+        --log-level info
+      EOF
+      chmod +x $CRAFT_PART_INSTALL/bin/start-customstream
+  
+  hooks:
+    plugin: dump
+    source: snap/local/hooks
+    organize:
+      '*': snap/hooks/
+
+layout:
+  /etc/mime.types:
+    bind-file: $SNAP/etc/mime.types
