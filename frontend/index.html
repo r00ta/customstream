@@ -8,20 +8,23 @@
     <link rel="stylesheet" href="/assets/styles.css" />
   </head>
   <body>
-    <header class="p-strip--dark is-shallow">
-      <div class="u-fixed-width">
-        <div class="p-heading-icon">
-          <div class="p-heading-icon__header">
-            <h1 class="p-heading--two">Simplestream Manager</h1>
-            <p class="p-heading--four u-text--muted">
-              Mirror upstream MAAS images, publish your custom workloads, and serve them from a dedicated simplestream endpoint.
-            </p>
+    <header class="custom-header">
+      <div class="u-fixed-width custom-header__container">
+        <h1 class="custom-header__title">CustomStream</h1>
+        <p class="custom-header__author">by r00ta</p>
+        <nav class="custom-header__nav">
+          <div class="p-tabs">
+            <div class="p-tabs__list" role="tablist">
+              <button class="p-tabs__link is-active" data-tab="mirror" role="tab">Upstream catalogue</button>
+              <button class="p-tabs__link" data-tab="custom" role="tab">Custom uploads</button>
+              <button class="p-tabs__link" data-tab="library" role="tab">Local library</button>
+            </div>
           </div>
-        </div>
+        </nav>
       </div>
     </header>
 
-    <main class="p-strip is-deep">
+    <main class="p-strip is-shallow">
       <div class="u-fixed-width">
         <div
           class="p-notification p-notification--positive u-hide"
@@ -32,26 +35,6 @@
           <div class="p-notification__content">
             <h5 class="p-notification__title" id="notification-title"></h5>
             <p id="notification-body"></p>
-          </div>
-        </div>
-
-        <div class="p-card p-card--highlight navigation-card">
-          <div class="p-card__content">
-            <div class="navigation-card__header">
-              <div>
-                <h2 class="p-heading--three">Image operations</h2>
-                <p class="u-text--muted">
-                  Switch between upstream catalogues, publish custom images, and review your simplestream library.
-                </p>
-              </div>
-            </div>
-            <div class="p-tabs">
-              <div class="p-tabs__list" role="tablist">
-                <button class="p-tabs__link is-active" data-tab="mirror" role="tab">Upstream catalogue</button>
-                <button class="p-tabs__link" data-tab="custom" role="tab">Custom uploads</button>
-                <button class="p-tabs__link" data-tab="library" role="tab">Local library</button>
-              </div>
-            </div>
           </div>
         </div>
 
@@ -79,186 +62,222 @@
                 </div>
                 <button class="p-button" type="submit">Load streams</button>
               </form>
+            </div>
+          </div>
 
-              <h3 class="p-heading--four">Available streams</h3>
-              <div class="p-table">
-                <table>
-                  <thead>
-                    <tr>
-                      <th scope="col">Stream</th>
-                      <th scope="col">Products</th>
-                      <th scope="col">Updated</th>
-                      <th scope="col"></th>
-                    </tr>
-                  </thead>
-                  <tbody id="streams-table-body"></tbody>
-                </table>
+          <div class="horizontal-layout">
+            <div class="horizontal-layout__left">
+              <div class="p-card">
+                <div class="p-card__header">
+                  <h3 class="p-heading--four">Available streams</h3>
+                </div>
+                <div class="p-card__content">
+                  <div class="streams-list" id="streams-list"></div>
+                </div>
               </div>
+            </div>
 
-              <div id="products-panel" class="products-panel">
-                <div class="products-panel__header">
-                  <div>
-                    <h3 class="p-heading--four" id="products-title">Products</h3>
-                    <p class="products-summary" id="products-summary">Select a stream to view products.</p>
-                  </div>
-                  <div class="products-controls">
-                    <div class="p-form__group">
-                      <label class="p-form__label" for="product-filter">Filter products</label>
-                      <input
-                        class="p-form__control"
-                        id="product-filter"
-                        name="product-filter"
-                        type="search"
-                        placeholder="Search by product ID, OS, release, or arch"
-                      />
+            <div class="horizontal-layout__right">
+              <div class="p-card">
+                <div class="p-card__header">
+                  <div class="products-panel__header">
+                    <div>
+                      <h3 class="p-heading--four" id="products-title">Products</h3>
+                      <p class="products-summary" id="products-summary">Select a stream to view products.</p>
+                    </div>
+                    <div class="products-controls">
+                      <div class="p-form__group">
+                        <label class="p-form__label" for="product-filter">Filter products</label>
+                        <input
+                          class="p-form__control"
+                          id="product-filter"
+                          name="product-filter"
+                          type="search"
+                          placeholder="Search by product ID, OS, release, or arch"
+                        />
+                      </div>
                     </div>
                   </div>
                 </div>
-
-                <form id="mirror-form">
-                  <div class="p-table p-table--matrix">
-                    <table>
-                      <thead>
-                        <tr>
-                          <th scope="col" class="selection-column">
-                            <input type="checkbox" id="toggle-all" aria-label="Select all products on this page" />
-                          </th>
-                          <th scope="col">Product</th>
-                          <th scope="col">OS</th>
-                          <th scope="col">Release</th>
-                          <th scope="col">Arch</th>
-                        </tr>
-                      </thead>
-                      <tbody id="products-table-body"></tbody>
-                    </table>
-                  </div>
-                  <div class="mirror-footer">
-                    <div class="p-button-group">
-                      <button class="p-button--positive" type="submit">Mirror selected</button>
-                      <button class="p-button--base" type="button" id="clear-selection">Clear</button>
+                <div class="p-card__content">
+                  <form id="mirror-form">
+                    <div class="p-table p-table--matrix table-scroll">
+                      <table>
+                        <thead>
+                          <tr>
+                            <th scope="col" class="selection-column">
+                              <input type="checkbox" id="toggle-all" aria-label="Select all products" />
+                            </th>
+                            <th scope="col">Product</th>
+                            <th scope="col">OS</th>
+                            <th scope="col">Release</th>
+                            <th scope="col">Arch</th>
+                          </tr>
+                        </thead>
+                        <tbody id="products-table-body"></tbody>
+                      </table>
                     </div>
-                  </div>
-                </form>
+                    <div class="mirror-footer">
+                      <div class="p-button-group">
+                        <button class="p-button--positive" type="submit">Mirror selected</button>
+                        <button class="p-button--base" type="button" id="clear-selection">Clear</button>
+                      </div>
+                    </div>
+                  </form>
+                </div>
               </div>
             </div>
           </div>
         </section>
 
         <section class="tab-panel u-hide" data-tab-panel="custom">
-          <div class="row">
-            <div class="col-12 col-medium-8">
+          <div class="horizontal-layout">
+            <div class="horizontal-layout__left-wide">
               <div class="p-card">
                 <div class="p-card__header">
                   <h2 class="p-heading--three">Publish a custom image</h2>
                   <p class="u-text--muted">
-                    Provide MAAS-compliant metadata and the canonical artifacts. We validate manifest requirements automatically.
+                    Provide MAAS-compliant metadata and artifacts to publish a custom boot image.
                   </p>
                 </div>
                 <div class="p-card__content">
-                  <form id="custom-form" class="p-form" enctype="multipart/form-data" novalidate>
-                    <h3 class="p-heading--four">Image metadata</h3>
-                    <div class="p-form__group">
-                      <label class="p-form__label" for="custom-name">Display name</label>
-                      <input class="p-form__control" id="custom-name" name="name" required />
-                    </div>
+                  <form id="custom-form" class="p-form p-form--stacked" enctype="multipart/form-data" novalidate>
+                    <h3 class="p-heading--5 u-no-margin--bottom">Image metadata</h3>
+                    <hr class="u-sv1" />
 
-                    <div class="p-form__group">
-                      <label class="p-form__label" for="custom-os">Operating system</label>
-                      <input class="p-form__control" id="custom-os" name="os_name" value="custom" />
-                      <p class="p-form-help-text">This string is written to the simplestream metadata.</p>
-                    </div>
-
-                    <div class="p-form__group">
-                      <label class="p-form__label" for="custom-release">Release</label>
-                      <input class="p-form__control" id="custom-release" name="release" required />
-                    </div>
-
-                    <div class="p-form__group">
-                      <label class="p-form__label" for="custom-release-codename">Release codename (optional)</label>
-                      <input
-                        class="p-form__control"
-                        id="custom-release-codename"
-                        name="release_codename"
-                        placeholder="focal"
-                      />
-                    </div>
-
-                    <h3 class="p-heading--four">Kernel &amp; architecture</h3>
-                    <div class="row form-row">
-                      <div class="col-12 col-medium-4">
-                        <label class="p-form__label" for="custom-version">Version</label>
-                        <input class="p-form__control" id="custom-version" name="version" required />
+                    <div class="p-form__group row">
+                      <div class="col-6">
+                        <label class="p-form__label is-required" for="custom-name">Display name</label>
+                        <input class="p-form__control" id="custom-name" name="name" type="text" required aria-required="true" />
                       </div>
-                      <div class="col-12 col-medium-4">
-                        <label class="p-form__label" for="custom-arch">Architecture</label>
-                        <input class="p-form__control" id="custom-arch" name="arch" placeholder="amd64" required />
-                      </div>
-                      <div class="col-12 col-medium-4">
-                        <label class="p-form__label" for="custom-subarch">Sub-arch (optional)</label>
-                        <input class="p-form__control" id="custom-subarch" name="subarch" />
+                      <div class="col-6">
+                        <label class="p-form__label is-required" for="custom-release">Release</label>
+                        <input class="p-form__control" id="custom-release" name="release" type="text" required aria-required="true" />
                       </div>
                     </div>
 
-                    <h3 class="p-heading--four">Optional descriptors</h3>
-                    <div class="row form-row">
-                      <div class="col-12 col-medium-4">
-                        <label class="p-form__label" for="custom-subarches">Subarches (comma separated)</label>
+                    <div class="p-form__group row">
+                      <div class="col-6">
+                        <label class="p-form__label" for="custom-os">Operating system</label>
+                        <input class="p-form__control" id="custom-os" name="os_name" type="text" value="custom" />
+                        <p class="p-form-help-text">This identifier appears in simplestream metadata.</p>
+                      </div>
+                      <div class="col-6">
+                        <label class="p-form__label" for="custom-release-codename">Release codename</label>
+                        <input
+                          class="p-form__control"
+                          id="custom-release-codename"
+                          name="release_codename"
+                          type="text"
+                          placeholder="e.g., focal, jammy"
+                        />
+                      </div>
+                    </div>
+
+                    <h3 class="p-heading--5 u-no-margin--bottom">Architecture &amp; versioning</h3>
+                    <hr class="u-sv1" />
+
+                    <div class="p-form__group row">
+                      <div class="col-4">
+                        <label class="p-form__label is-required" for="custom-version">Version</label>
+                        <input class="p-form__control" id="custom-version" name="version" type="text" required aria-required="true" />
+                      </div>
+                      <div class="col-4">
+                        <label class="p-form__label is-required" for="custom-arch">Architecture</label>
+                        <input class="p-form__control" id="custom-arch" name="arch" type="text" placeholder="amd64" required aria-required="true" />
+                      </div>
+                      <div class="col-4">
+                        <label class="p-form__label" for="custom-subarch">Sub-architecture</label>
+                        <input class="p-form__control" id="custom-subarch" name="subarch" type="text" placeholder="generic" />
+                      </div>
+                    </div>
+
+                    <div class="p-form__group row">
+                      <div class="col-6">
+                        <label class="p-form__label" for="custom-kflavor">Kernel flavor</label>
+                        <input class="p-form__control" id="custom-kflavor" name="kflavor" type="text" placeholder="ga" />
+                      </div>
+                      <div class="col-6">
+                        <label class="p-form__label" for="custom-krel">Kernel release</label>
+                        <input class="p-form__control" id="custom-krel" name="krel" type="text" placeholder="5.15.0-87" />
+                      </div>
+                    </div>
+
+                    <h3 class="p-heading--5 u-no-margin--bottom">Additional options</h3>
+                    <hr class="u-sv1" />
+
+                    <div class="p-form__group row">
+                      <div class="col-12">
+                        <label class="p-form__label" for="custom-subarches">Supported sub-architectures</label>
                         <input
                           class="p-form__control"
                           id="custom-subarches"
                           name="subarches"
-                          placeholder="amd64-generic,amd64-highbank"
+                          type="text"
+                          placeholder="amd64-generic, amd64-highbank"
                         />
-                        <p class="p-form-help-text">Exposed via simplestream metadata. Comma or space separated list.</p>
-                      </div>
-                      <div class="col-12 col-medium-4">
-                        <label class="p-form__label" for="custom-kflavor">Kernel flavor (optional)</label>
-                        <input class="p-form__control" id="custom-kflavor" name="kflavor" placeholder="ga" />
-                      </div>
-                      <div class="col-12 col-medium-4">
-                        <label class="p-form__label" for="custom-krel">Kernel release (optional)</label>
-                        <input class="p-form__control" id="custom-krel" name="krel" placeholder="5.15.0-87" />
+                        <p class="p-form-help-text">Comma or space separated list exposed in simplestream metadata.</p>
                       </div>
                     </div>
 
-                    <div class="row form-row">
-                      <div class="col-12 col-medium-6">
-                        <label class="p-form__label" for="custom-label">Label (optional)</label>
-                        <input class="p-form__control" id="custom-label" name="label" placeholder="custom" />
+                    <div class="p-form__group row">
+                      <div class="col-6">
+                        <label class="p-form__label" for="custom-label">Label</label>
+                        <input class="p-form__control" id="custom-label" name="label" type="text" placeholder="custom" />
                       </div>
-                      <div class="col-12 col-medium-6">
-                        <label class="p-form__label" for="custom-description">Description (optional)</label>
+                      <div class="col-6">
+                        <label class="p-form__label" for="custom-description">Description</label>
                         <textarea class="p-form__control" id="custom-description" name="description" rows="3"></textarea>
                       </div>
                     </div>
 
-                    <fieldset class="p-form__group">
-                      <legend class="p-form__label">Artifacts</legend>
-                      <p class="p-form-help-text">
-                        Upload the canonical MAAS artifacts. A manifest must accompany any root filesystem.
-                      </p>
-                      <label class="p-form__label" for="custom-kernel">Boot kernel (boot-kernel)</label>
-                      <input class="p-form__control" id="custom-kernel" name="kernel" type="file" />
+                    <h3 class="p-heading--5 u-no-margin--bottom">Artifacts</h3>
+                    <hr class="u-sv1" />
 
-                      <label class="p-form__label" for="custom-initrd">Boot initrd (boot-initrd)</label>
-                      <input class="p-form__control" id="custom-initrd" name="initrd" type="file" />
+                    <p class="p-form-help-text">
+                      Upload MAAS boot artifacts. A manifest must accompany any root filesystem.
+                    </p>
 
-                      <label class="p-form__label" for="custom-rootfs">Root filesystem (squashfs)</label>
-                      <input class="p-form__control" id="custom-rootfs" name="rootfs" type="file" />
+                    <div class="p-form__group row">
+                      <div class="col-6">
+                        <label class="p-form__label" for="custom-kernel">Boot kernel</label>
+                        <input class="p-form__control" id="custom-kernel" name="kernel" type="file" accept="*/*" />
+                        <p class="p-form-help-text">boot-kernel</p>
+                      </div>
+                      <div class="col-6">
+                        <label class="p-form__label" for="custom-initrd">Boot initrd</label>
+                        <input class="p-form__control" id="custom-initrd" name="initrd" type="file" accept="*/*" />
+                        <p class="p-form-help-text">boot-initrd</p>
+                      </div>
+                    </div>
 
-                      <label class="p-form__label" for="custom-manifest">Manifest (squashfs.manifest)</label>
-                      <input class="p-form__control" id="custom-manifest" name="manifest" type="file" />
-                    </fieldset>
+                    <div class="p-form__group row">
+                      <div class="col-6">
+                        <label class="p-form__label" for="custom-rootfs">Root filesystem</label>
+                        <input class="p-form__control" id="custom-rootfs" name="rootfs" type="file" accept="*/*" />
+                        <p class="p-form-help-text">squashfs</p>
+                      </div>
+                      <div class="col-6">
+                        <label class="p-form__label" for="custom-manifest">Manifest</label>
+                        <input class="p-form__control" id="custom-manifest" name="manifest" type="file" accept="*/*" />
+                        <p class="p-form-help-text">squashfs.manifest</p>
+                      </div>
+                    </div>
 
-                    <div class="p-button-group">
-                      <button class="p-button--positive" type="submit">Publish</button>
-                      <button class="p-button--base" type="reset">Reset</button>
+                    <hr />
+
+                    <div class="p-form__group">
+                      <div class="p-button-group u-align--right">
+                        <button class="p-button--base" type="reset">Reset form</button>
+                        <button class="p-button--positive" type="submit">Publish image</button>
+                      </div>
                     </div>
                   </form>
                 </div>
               </div>
             </div>
-            <div class="col-12 col-medium-4">
+
+            <div class="horizontal-layout__right-narrow">
               <div class="p-card info-card">
                 <div class="p-card__header">
                   <h3 class="p-heading--four">Serve your simplestream</h3>
@@ -278,60 +297,48 @@
         </section>
 
         <section class="tab-panel u-hide" data-tab-panel="library">
-          <div class="p-card">
-            <div class="p-card__header">
-              <h2 class="p-heading--three">Mirror job queue</h2>
-              <p class="u-text--muted">
-                Track queued, running, and recently completed mirror operations. Entries update automatically while work is in progress.
-              </p>
-            </div>
-            <div class="p-card__content">
-              <div class="p-table table-scroll">
-                <table>
-                  <thead>
-                    <tr>
-                      <th scope="col">Job</th>
-                      <th scope="col">Product ID</th>
-                      <th scope="col">Status</th>
-                      <th scope="col">Progress</th>
-                      <th scope="col">Created</th>
-                      <th scope="col">Started</th>
-                      <th scope="col">Finished</th>
-                    </tr>
-                  </thead>
-                  <tbody id="jobs-table-body"></tbody>
-                </table>
+          <div class="horizontal-layout">
+            <div class="horizontal-layout__left">
+              <div class="p-card">
+                <div class="p-card__header">
+                  <h3 class="p-heading--four">Mirror job queue</h3>
+                  <p class="u-text--muted">
+                    Track queued, running, and recently completed mirror operations.
+                  </p>
+                </div>
+                <div class="p-card__content">
+                  <div class="jobs-list" id="jobs-list"></div>
+                </div>
               </div>
             </div>
-          </div>
 
-          <div class="p-card">
-            <div class="p-card__header">
-              <h2 class="p-heading--three">Local simplestream library</h2>
-              <p class="u-text--muted">
-                Review the images currently published by this service. Pending mirrors refresh automatically.
-              </p>
-            </div>
-            <div class="p-card__content">
-              <div class="p-table table-scroll library-table">
-                <table>
-                  <thead>
-                    <tr>
-                      <th scope="col">Name</th>
-                      <th scope="col">Product ID</th>
-                      <th scope="col">Type</th>
-                      <th scope="col">Status</th>
-                      <th scope="col">Release</th>
-                      <th scope="col">Codename</th>
-                      <th scope="col">Arch</th>
-                      <th scope="col">Subarches</th>
-                      <th scope="col">Kernel</th>
-                      <th scope="col">Artifacts</th>
-                      <th scope="col"></th>
-                    </tr>
-                  </thead>
-                  <tbody id="library-table-body"></tbody>
-                </table>
+            <div class="horizontal-layout__right">
+              <div class="p-card">
+                <div class="p-card__header">
+                  <h3 class="p-heading--four">Local simplestream library</h3>
+                  <p class="u-text--muted">
+                    Review the images currently published by this service.
+                  </p>
+                </div>
+                <div class="p-card__content">
+                  <div class="p-table table-scroll library-table">
+                    <table>
+                      <thead>
+                        <tr>
+                          <th scope="col">Name</th>
+                          <th scope="col">Product ID</th>
+                          <th scope="col">Type</th>
+                          <th scope="col">Status</th>
+                          <th scope="col">Release</th>
+                          <th scope="col">Arch</th>
+                          <th scope="col">Artifacts</th>
+                          <th scope="col"></th>
+                        </tr>
+                      </thead>
+                      <tbody id="library-table-body"></tbody>
+                    </table>
+                  </div>
+                </div>
               </div>
             </div>
           </div>

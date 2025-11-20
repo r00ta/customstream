@@ -231,27 +231,40 @@ async function loadStreams(indexUrl) {
 }
 
 function renderStreams() {
-  const body = document.getElementById("streams-table-body");
-  body.innerHTML = "";
+  const container = document.getElementById("streams-list");
+  if (!container) {
+    return;
+  }
+  container.innerHTML = "";
   if (!state.streams.length) {
-    body.innerHTML = `<tr><td colspan="4">No streams found for ${state.indexUrl}</td></tr>`;
+    container.innerHTML = `<p class="u-text--muted">No streams found for ${state.indexUrl}</p>`;
     return;
   }
   state.streams.forEach((stream) => {
-    const row = document.createElement("tr");
-    row.innerHTML = `
-      <td><code>${stream.stream_id}</code></td>
-      <td>${stream.products.length}</td>
-      <td>${stream.updated ?? ""}</td>
-      <td><button class="p-button--base" data-stream="${stream.stream_id}">View products</button></td>
-    `;
-    body.appendChild(row);
-  });
+    const item = document.createElement("div");
+    item.className = "stream-item";
+    if (state.selectedStream === stream.stream_id) {
+      item.classList.add("is-active");
+    }
+    item.dataset.streamId = stream.stream_id;
 
-  body.querySelectorAll("button[data-stream]").forEach((button) => {
-    button.addEventListener("click", async () => {
-      const streamId = button.dataset.stream;
-      await loadProducts(streamId);
+    const idSpan = document.createElement("span");
+    idSpan.className = "stream-item__id";
+    idSpan.textContent = stream.stream_id;
+
+    const metaSpan = document.createElement("span");
+    metaSpan.className = "stream-item__meta";
+    metaSpan.textContent = `${stream.products.length} product(s)`;
+    if (stream.updated) {
+      metaSpan.textContent += ` • Updated: ${stream.updated}`;
+    }
+
+    item.appendChild(idSpan);
+    item.appendChild(metaSpan);
+    container.appendChild(item);
+
+    item.addEventListener("click", async () => {
+      await loadProducts(stream.stream_id);
     });
   });
 }
@@ -277,8 +290,8 @@ async function loadProducts(streamId) {
     if (filterInput) {
       filterInput.value = "";
     }
+    renderStreams();
     renderProducts();
-    switchTab("mirror");
   } catch (error) {
     console.error(error);
     showNotification("Unable to load products", error.message, "negative");
@@ -551,7 +564,7 @@ async function refreshLibrary(silent = false) {
 
   const table = document.getElementById("library-table-body");
   if (!silent) {
-    table.innerHTML = "<tr><td colspan='11'>Loading…</td></tr>";
+    table.innerHTML = "<tr><td colspan='8'>Loading…</td></tr>";
   }
 
   try {
@@ -563,7 +576,7 @@ async function refreshLibrary(silent = false) {
     table.innerHTML = "";
 
     if (!data.items.length) {
-      table.innerHTML = "<tr><td colspan='11'>No images mirrored yet.</td></tr>";
+      table.innerHTML = "<tr><td colspan='8'>No images mirrored yet.</td></tr>";
       state.lastLibraryPending = false;
       return false;
     }
@@ -571,10 +584,7 @@ async function refreshLibrary(silent = false) {
     let hasPending = false;
 
     data.items.forEach((image) => {
-      const versionText = image.version ? ` (${image.version})` : "";
-      const subarches = image.subarches ?? "";
-      const kernelParts = [image.kflavor, image.krel].filter(Boolean);
-      const kernelSummary = kernelParts.join(" • ");
+      const versionText = image.version ? ` v${image.version}` : "";
       const statusBadge = renderStatusBadge(image.status, image.status_detail);
       if ((image.status || "").toLowerCase() !== "ready") {
         hasPending = true;
@@ -583,14 +593,11 @@ async function refreshLibrary(silent = false) {
       const row = document.createElement("tr");
       row.innerHTML = `
         <td>${image.name}</td>
-        <td><code>${image.product_id}</code></td>
+        <td><code style="font-size: 0.85rem;">${image.product_id}</code></td>
         <td>${image.image_type}</td>
         <td>${statusBadge}</td>
         <td>${image.release ?? ""}${versionText}</td>
-        <td>${image.release_codename ?? ""}</td>
         <td>${image.arch ?? ""}</td>
-        <td>${subarches}</td>
-        <td>${kernelSummary}</td>
         <td>
           ${image.artifacts
             .map(
@@ -599,7 +606,7 @@ async function refreshLibrary(silent = false) {
             )
             .join(", ")}
         </td>
-        <td><button class="p-button--base" data-delete="${image.id}">Remove</button></td>
+        <td><button class="p-button--base is-small" data-delete="${image.id}">Remove</button></td>
       `;
       table.appendChild(row);
     });
@@ -618,7 +625,7 @@ async function refreshLibrary(silent = false) {
   } catch (error) {
     console.error(error);
     if (!silent) {
-      table.innerHTML = `<tr><td colspan='11'>${error.message}</td></tr>`;
+      table.innerHTML = `<tr><td colspan='8'>${error.message}</td></tr>`;
       showNotification("Unable to load library", error.message, "negative");
     }
     state.lastLibraryPending = true;
@@ -634,14 +641,14 @@ async function refreshJobs(silent = false) {
   }
   state.isRefreshingJobs = true;
 
-  const table = document.getElementById("jobs-table-body");
-  if (!table) {
+  const container = document.getElementById("jobs-list");
+  if (!container) {
     state.isRefreshingJobs = false;
     return state.lastJobsPending;
   }
 
   if (!silent) {
-    table.innerHTML = "<tr><td colspan='7'>Loading…</td></tr>";
+    container.innerHTML = "<p class='u-text--muted'>Loading jobs…</p>";
   }
 
   try {
@@ -652,10 +659,10 @@ async function refreshJobs(silent = false) {
 
     const data = await response.json();
     const items = data.items ?? [];
-    table.innerHTML = "";
+    container.innerHTML = "";
 
     if (!items.length) {
-      table.innerHTML = "<tr><td colspan='7'>No mirror jobs yet.</td></tr>";
+      container.innerHTML = "<p class='u-text--muted'>No mirror jobs yet.</p>";
       state.jobs = [];
       state.lastJobsPending = false;
       return false;
@@ -669,27 +676,76 @@ async function refreshJobs(silent = false) {
         hasPending = true;
       }
 
-      const statusBadge = renderStatusBadge(job.status, job.message);
-      const hasProgress = job.progress !== null && job.progress !== undefined;
-      let progressText = "—";
-      if (hasProgress) {
-        const numericProgress = Number(job.progress);
-        if (!Number.isNaN(numericProgress)) {
-          progressText = `${Math.max(0, Math.min(100, Math.round(numericProgress)))}%`;
-        }
+      const jobCard = document.createElement("div");
+      jobCard.className = "job-item";
+
+      const header = document.createElement("div");
+      header.className = "job-item__header";
+
+      const jobId = document.createElement("span");
+      jobId.className = "job-item__id";
+      jobId.textContent = `Job #${job.id}`;
+
+      const statusBadge = document.createElement("span");
+      statusBadge.innerHTML = renderStatusBadge(job.status, null);
+
+      header.appendChild(jobId);
+      header.appendChild(statusBadge);
+
+      const productLine = document.createElement("div");
+      productLine.className = "job-item__product";
+      productLine.textContent = job.product_id;
+
+      const details = document.createElement("div");
+      details.className = "job-item__details";
+
+      if (job.message) {
+        const messageLine = document.createElement("div");
+        messageLine.textContent = job.message;
+        messageLine.style.color = "#c7162b";
+        details.appendChild(messageLine);
       }
 
-      const row = document.createElement("tr");
-      row.innerHTML = `
-        <td>${job.id}</td>
-        <td><code>${job.product_id}</code></td>
-        <td>${statusBadge}</td>
-        <td>${progressText}</td>
-        <td>${formatDateTime(job.created_at)}</td>
-        <td>${formatDateTime(job.started_at)}</td>
-        <td>${formatDateTime(job.finished_at)}</td>
-      `;
-      table.appendChild(row);
+      const createdLine = document.createElement("div");
+      createdLine.textContent = `Created: ${formatDateTime(job.created_at)}`;
+      details.appendChild(createdLine);
+
+      if (job.started_at) {
+        const startedLine = document.createElement("div");
+        startedLine.textContent = `Started: ${formatDateTime(job.started_at)}`;
+        details.appendChild(startedLine);
+      }
+
+      if (job.finished_at) {
+        const finishedLine = document.createElement("div");
+        finishedLine.textContent = `Finished: ${formatDateTime(job.finished_at)}`;
+        details.appendChild(finishedLine);
+      }
+
+      jobCard.appendChild(header);
+      jobCard.appendChild(productLine);
+      jobCard.appendChild(details);
+
+      if (job.progress !== null && job.progress !== undefined) {
+        const progressContainer = document.createElement("div");
+        progressContainer.className = "job-item__progress";
+
+        const progressBar = document.createElement("div");
+        progressBar.className = "job-item__progress-bar";
+
+        const progressFill = document.createElement("div");
+        progressFill.className = "job-item__progress-fill";
+        const numericProgress = Number(job.progress);
+        if (!Number.isNaN(numericProgress)) {
+          progressFill.style.width = `${Math.max(0, Math.min(100, numericProgress))}%`;
+        }
+
+        progressBar.appendChild(progressFill);
+        progressContainer.appendChild(progressBar);
+        jobCard.appendChild(progressContainer);
+      }
+
+      container.appendChild(jobCard);
     });
 
     state.jobs = items;
@@ -698,7 +754,7 @@ async function refreshJobs(silent = false) {
   } catch (error) {
     console.error(error);
     if (!silent) {
-      table.innerHTML = `<tr><td colspan='7'>${error.message}</td></tr>`;
+      container.innerHTML = `<p class='u-text--muted'>${error.message}</p>`;
       showNotification("Unable to load jobs", error.message, "negative");
     }
     state.lastJobsPending = true;
