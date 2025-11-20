@@ -5,14 +5,14 @@ const state = {
   selectedStream: null,
   selectedProducts: new Set(),
   productFilter: "",
-  productPage: 1,
-  productPageSize: 10,
   jobs: [],
   libraryRefreshHandle: null,
   isRefreshingLibrary: false,
   isRefreshingJobs: false,
   lastLibraryPending: false,
   lastJobsPending: false,
+  collapsedReleases: new Set(),
+  collapsedArchGroups: new Set(),
 };
 
 const panels = document.querySelectorAll("section[data-tab-panel]");
@@ -20,6 +20,7 @@ const tabs = document.querySelectorAll(".p-tabs__link");
 const notification = document.getElementById("notification");
 const notificationTitle = document.getElementById("notification-title");
 const notificationBody = document.getElementById("notification-body");
+const productCollator = new Intl.Collator(undefined, { numeric: true, sensitivity: "base" });
 
 function showNotification(title, message, tone = "positive") {
   notification.className = `p-notification p-notification--${tone}`;
@@ -125,6 +126,39 @@ function ensureLibraryPolling(pending) {
   }
 }
 
+function sortUpstreamProducts(items) {
+  return [...items].sort((a, b) => {
+    const buildA = a.build_id ?? "";
+    const buildB = b.build_id ?? "";
+    const buildCompare = productCollator.compare(buildB, buildA);
+    if (buildCompare !== 0) {
+      return buildCompare;
+    }
+
+    const releaseA = a.release ?? "";
+    const releaseB = b.release ?? "";
+    const releaseCompare = productCollator.compare(releaseB, releaseA);
+    if (releaseCompare !== 0) {
+      return releaseCompare;
+    }
+
+    const versionA = a.version ?? "";
+    const versionB = b.version ?? "";
+    const versionCompare = productCollator.compare(versionB, versionA);
+    if (versionCompare !== 0) {
+      return versionCompare;
+    }
+
+    return productCollator.compare(b.product_id, a.product_id);
+  });
+}
+
+function getProductGroupLabel(product) {
+  const release = product.release || "Unknown release";
+  const osName = product.os ? ` (${product.os})` : "";
+  return `${release}${osName}`;
+}
+
 function getFilteredProducts() {
   if (!state.selectedStream) {
     return [];
@@ -149,6 +183,22 @@ function getFilteredProducts() {
       .toLowerCase();
     return haystack.includes(query);
   });
+}
+
+function getArchitectureLabel(product) {
+  const arch = product.arch || "Unknown architecture";
+  if (product.subarch) {
+    return `${arch} (${product.subarch})`;
+  }
+  return arch;
+}
+
+function getReleaseKey(product) {
+  return getProductGroupLabel(product);
+}
+
+function getArchKey(releaseLabel, archLabel) {
+  return `${releaseLabel}::${archLabel}`;
 }
 
 function switchTab(target) {
@@ -219,7 +269,10 @@ async function loadProducts(streamId) {
     state.selectedStream = streamId;
     state.selectedProducts.clear();
     state.productFilter = "";
-    state.productPage = 1;
+    state.collapsedReleases = new Set(products.map((product) => getReleaseKey(product)));
+    state.collapsedArchGroups = new Set(
+      products.map((product) => getArchKey(getReleaseKey(product), getArchitectureLabel(product)))
+    );
     const filterInput = document.getElementById("product-filter");
     if (filterInput) {
       filterInput.value = "";
@@ -237,26 +290,23 @@ function renderProducts() {
   const body = document.getElementById("products-table-body");
   const toggleAll = document.getElementById("toggle-all");
   const summary = document.getElementById("products-summary");
-  const pageIndicator = document.getElementById("products-page-indicator");
-  const prevButton = document.getElementById("products-page-prev");
-  const nextButton = document.getElementById("products-page-next");
 
   body.innerHTML = "";
   toggleAll.checked = false;
   toggleAll.indeterminate = false;
+  toggleAll.disabled = false;
 
   if (!state.selectedStream) {
     title.textContent = "Products";
     summary.textContent = "Select a stream to view products.";
     body.innerHTML = "<tr><td colspan='5'>Select a stream to view products.</td></tr>";
-    pageIndicator.textContent = "";
-    prevButton.disabled = true;
-    nextButton.disabled = true;
+    toggleAll.disabled = true;
     return;
   }
 
   const filtered = getFilteredProducts();
-  const products = filtered;
+  const products = sortUpstreamProducts(filtered);
+
   title.textContent = `Products in ${state.selectedStream}`;
 
   if (!products.length) {
@@ -264,34 +314,113 @@ function renderProducts() {
       ? "No products match your filters."
       : "No products available for this stream.";
     body.innerHTML = "<tr><td colspan='5'>No products available.</td></tr>";
-    pageIndicator.textContent = "";
-    prevButton.disabled = true;
-    nextButton.disabled = true;
+    toggleAll.disabled = true;
     return;
   }
 
-  const total = products.length;
-  const pageSize = state.productPageSize;
-  const pages = Math.max(1, Math.ceil(total / pageSize));
-  if (state.productPage > pages) {
-    state.productPage = pages;
-  }
-  if (state.productPage < 1) {
-    state.productPage = 1;
-  }
+  const selectedInFiltered = products.reduce(
+    (count, product) => (state.selectedProducts.has(product.product_id) ? count + 1 : count),
+    0
+  );
 
-  const start = (state.productPage - 1) * pageSize;
-  const visible = products.slice(start, start + pageSize);
+  summary.textContent = `Found ${products.length} product(s). Selected: ${selectedInFiltered}.`;
+  toggleAll.checked = selectedInFiltered > 0 && selectedInFiltered === products.length;
+  toggleAll.indeterminate = selectedInFiltered > 0 && selectedInFiltered < products.length;
+  toggleAll.disabled = products.length === 0;
 
-  const selectedOnPage = visible.filter((product) => state.selectedProducts.has(product.product_id)).length;
-  summary.textContent = `Showing ${start + 1}-${start + visible.length} of ${total} product(s). Selected: ${state.selectedProducts.size}`;
-  pageIndicator.textContent = `Page ${state.productPage} of ${pages}`;
-  prevButton.disabled = state.productPage <= 1;
-  nextButton.disabled = state.productPage >= pages;
-  toggleAll.checked = visible.length > 0 && selectedOnPage === visible.length;
-  toggleAll.indeterminate = selectedOnPage > 0 && selectedOnPage < visible.length;
+  const releaseCounts = new Map();
+  const archCounts = new Map();
+  products.forEach((product) => {
+    const releaseLabel = getReleaseKey(product);
+    const archLabel = getArchitectureLabel(product);
+    const archKey = getArchKey(releaseLabel, archLabel);
+    releaseCounts.set(releaseLabel, (releaseCounts.get(releaseLabel) || 0) + 1);
+    archCounts.set(archKey, (archCounts.get(archKey) || 0) + 1);
+  });
 
-  visible.forEach((product) => {
+  let lastRelease = null;
+  let lastArch = null;
+  products.forEach((product) => {
+    const releaseLabel = getReleaseKey(product);
+    const releaseCollapsed = state.collapsedReleases.has(releaseLabel);
+    if (releaseLabel !== lastRelease) {
+      const releaseRow = document.createElement("tr");
+      releaseRow.className = "products-release-row";
+      const releaseCell = document.createElement("td");
+      releaseCell.colSpan = 5;
+      releaseCell.className = "products-release-cell";
+
+      const releaseButton = document.createElement("button");
+      releaseButton.type = "button";
+      releaseButton.className = "group-toggle";
+      releaseButton.dataset.releaseToggle = releaseLabel;
+      releaseButton.setAttribute("aria-expanded", String(!releaseCollapsed));
+
+      const iconSpan = document.createElement("span");
+      iconSpan.className = "group-toggle__icon";
+      iconSpan.textContent = releaseCollapsed ? "▶" : "▼";
+
+      const labelSpan = document.createElement("span");
+      labelSpan.className = "group-toggle__label";
+      labelSpan.textContent = releaseLabel;
+
+      const countSpan = document.createElement("span");
+      countSpan.className = "group-toggle__count";
+      countSpan.textContent = `${releaseCounts.get(releaseLabel) ?? 0} item(s)`;
+
+      releaseButton.append(iconSpan, labelSpan, countSpan);
+      releaseCell.appendChild(releaseButton);
+      releaseRow.appendChild(releaseCell);
+      body.appendChild(releaseRow);
+      lastRelease = releaseLabel;
+      lastArch = null;
+    }
+
+    if (releaseCollapsed) {
+      return;
+    }
+
+    const archLabel = getArchitectureLabel(product);
+    const archKey = getArchKey(releaseLabel, archLabel);
+    const archCollapsed = state.collapsedArchGroups.has(archKey);
+
+    if (archLabel !== lastArch) {
+      const archRow = document.createElement("tr");
+      archRow.className = "products-arch-row";
+
+      const archCell = document.createElement("td");
+      archCell.colSpan = 5;
+      archCell.className = "products-arch-cell";
+
+      const archButton = document.createElement("button");
+      archButton.type = "button";
+      archButton.className = "group-toggle group-toggle--arch";
+      archButton.dataset.archToggle = archKey;
+      archButton.setAttribute("aria-expanded", String(!archCollapsed));
+
+      const archIcon = document.createElement("span");
+      archIcon.className = "group-toggle__icon";
+      archIcon.textContent = archCollapsed ? "▶" : "▼";
+
+      const archLabelSpan = document.createElement("span");
+      archLabelSpan.className = "group-toggle__label";
+      archLabelSpan.textContent = archLabel;
+
+      const archCountSpan = document.createElement("span");
+      archCountSpan.className = "group-toggle__count";
+      archCountSpan.textContent = `${archCounts.get(archKey) ?? 0} item(s)`;
+
+      archButton.append(archIcon, archLabelSpan, archCountSpan);
+      archCell.appendChild(archButton);
+      archRow.appendChild(archCell);
+      body.appendChild(archRow);
+      lastArch = archLabel;
+    }
+
+    if (archCollapsed) {
+      return;
+    }
+
     const row = document.createElement("tr");
     row.innerHTML = `
       <td><input type="checkbox" data-product="${product.product_id}" ${
@@ -303,6 +432,36 @@ function renderProducts() {
       <td>${product.arch ?? ""}</td>
     `;
     body.appendChild(row);
+  });
+
+  body.querySelectorAll("button[data-release-toggle]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const key = button.dataset.releaseToggle;
+      if (!key) {
+        return;
+      }
+      if (state.collapsedReleases.has(key)) {
+        state.collapsedReleases.delete(key);
+      } else {
+        state.collapsedReleases.add(key);
+      }
+      renderProducts();
+    });
+  });
+
+  body.querySelectorAll("button[data-arch-toggle]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const key = button.dataset.archToggle;
+      if (!key) {
+        return;
+      }
+      if (state.collapsedArchGroups.has(key)) {
+        state.collapsedArchGroups.delete(key);
+      } else {
+        state.collapsedArchGroups.add(key);
+      }
+      renderProducts();
+    });
   });
 
   body.querySelectorAll("input[type='checkbox']").forEach((checkbox) => {
@@ -319,21 +478,17 @@ function renderProducts() {
 
   if (!toggleAll.dataset.bound) {
     toggleAll.addEventListener("change", () => {
-      const isChecked = toggleAll.checked;
-      if (!isChecked) {
-        body.querySelectorAll("input[type='checkbox']").forEach((checkbox) => {
-          checkbox.checked = false;
-          state.selectedProducts.delete(checkbox.dataset.product);
+      const filteredProducts = sortUpstreamProducts(getFilteredProducts());
+      if (!toggleAll.checked) {
+        filteredProducts.forEach((product) => {
+          state.selectedProducts.delete(product.product_id);
         });
-        window.requestAnimationFrame(() => renderProducts());
-        return;
+      } else {
+        filteredProducts.forEach((product) => {
+          state.selectedProducts.add(product.product_id);
+        });
       }
-
-      body.querySelectorAll("input[type='checkbox']").forEach((checkbox) => {
-        checkbox.checked = true;
-        state.selectedProducts.add(checkbox.dataset.product);
-      });
-      window.requestAnimationFrame(() => renderProducts());
+      renderProducts();
     });
     toggleAll.dataset.bound = "true";
   }
@@ -377,10 +532,9 @@ async function mirrorSelected() {
     showNotification("Mirror scheduled", message, skipped.length ? "caution" : "positive");
     state.selectedProducts.clear();
     document.getElementById("mirror-form").reset();
-    state.productPage = 1;
     renderProducts();
-  const [libraryPending, jobsPending] = await Promise.all([refreshLibrary(), refreshJobs()]);
-  ensureLibraryPolling(Boolean(libraryPending || jobsPending));
+    const [libraryPending, jobsPending] = await Promise.all([refreshLibrary(), refreshJobs()]);
+    ensureLibraryPolling(Boolean(libraryPending || jobsPending));
   } catch (error) {
     console.error(error);
     showNotification("Mirror failed", error.message, "negative");
@@ -590,8 +744,8 @@ async function submitCustomForm(event) {
     form.reset();
     showNotification("Custom image published", "The simplestream metadata has been updated.");
     switchTab("library");
-  const [libraryPending, jobsPending] = await Promise.all([refreshLibrary(), refreshJobs()]);
-  ensureLibraryPolling(Boolean(libraryPending || jobsPending));
+    const [libraryPending, jobsPending] = await Promise.all([refreshLibrary(), refreshJobs()]);
+    ensureLibraryPolling(Boolean(libraryPending || jobsPending));
   } catch (error) {
     console.error(error);
     showNotification("Upload failed", error.message, "negative");
@@ -624,26 +778,6 @@ document.getElementById("upstream-form").addEventListener("submit", (event) => {
 
 document.getElementById("product-filter").addEventListener("input", (event) => {
   state.productFilter = event.target.value;
-  state.productPage = 1;
-  renderProducts();
-});
-
-document.getElementById("product-page-size").addEventListener("change", (event) => {
-  const value = Number.parseInt(event.target.value, 10);
-  state.productPageSize = Number.isNaN(value) || value <= 0 ? 10 : value;
-  state.productPage = 1;
-  renderProducts();
-});
-
-document.getElementById("products-page-prev").addEventListener("click", () => {
-  if (state.productPage > 1) {
-    state.productPage -= 1;
-    renderProducts();
-  }
-});
-
-document.getElementById("products-page-next").addEventListener("click", () => {
-  state.productPage += 1;
   renderProducts();
 });
 

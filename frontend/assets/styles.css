@@ -105,23 +105,77 @@ fieldset.p-form__group legend {
   width: 3rem;
 }
 
+.products-release-row td {
+  background: #eef4ff;
+  font-weight: 600;
+  color: #1f2d66;
+}
+
+.products-release-cell {
+  padding: 0.7rem 1rem;
+}
+
+.products-arch-row td {
+  background: #f7f9ff;
+  color: #2f3e7d;
+}
+
+.products-arch-cell {
+  padding: 0.6rem 1.75rem;
+}
+
+.group-toggle {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  width: 100%;
+  border: 0;
+  background: transparent;
+  padding: 0;
+  text-align: left;
+  cursor: pointer;
+  color: inherit;
+  font: inherit;
+}
+
+.group-toggle:focus {
+  outline: 2px solid #0f62fe;
+  outline-offset: 2px;
+}
+
+.group-toggle__icon {
+  font-size: 0.85rem;
+}
+
+.group-toggle__label {
+  flex: 1 1 auto;
+}
+
+.group-toggle__count {
+  margin-left: auto;
+  font-size: 0.85rem;
+  color: #5c6c94;
+}
+
+.group-toggle--arch {
+  font-weight: 500;
+}
+
+.group-toggle--arch .group-toggle__label {
+  font-weight: 500;
+}
+
+.group-toggle--arch .group-toggle__icon {
+  font-size: 0.8rem;
+}
+
 .mirror-footer {
   display: flex;
-  justify-content: space-between;
+  justify-content: flex-end;
   align-items: center;
   flex-wrap: wrap;
   gap: 1rem;
   margin-top: 1rem;
-}
-
-.mirror-pagination {
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
-}
-
-.pagination-indicator {
-  font-weight: 500;
 }
 
 .p-button-group {

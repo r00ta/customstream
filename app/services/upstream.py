@@ -67,13 +67,31 @@ async def list_products_for_stream(index_url: str, stream_id: str) -> list[Upstr
         product_payload = response.json()
 
     products = product_payload.get("products", {})
-    return [_serialize_product(stream_id, product_path, index_url, pid, meta) for pid, meta in products.items()]
+
+    sortable_products: list[tuple[str | None, str, dict[str, Any]]] = []
+    for pid, meta in products.items():
+        latest = _latest_version(meta.get("versions", {}))
+        latest_key = latest[0] if latest else None
+        sortable_products.append((latest_key, pid, meta))
+
+    sortable_products.sort(key=lambda item: ((item[0] or ""), item[1]), reverse=True)
+
+    return [
+        _serialize_product(stream_id, product_path, index_url, product_id, meta, latest_key)
+        for latest_key, product_id, meta in sortable_products
+    ]
 
 
-def _serialize_product(stream_id: str, stream_path: str, index_url: str, product_id: str, meta: dict[str, Any]) -> UpstreamProduct:
+def _serialize_product(
+    stream_id: str,
+    stream_path: str,
+    index_url: str,
+    product_id: str,
+    meta: dict[str, Any],
+    latest_version_key: str | None,
+) -> UpstreamProduct:
     """Build an UpstreamProduct from the upstream metadata."""
 
-    version_info = _latest_version(meta.get("versions", {}))
     return UpstreamProduct(
         product_id=product_id,
         name=_product_name(meta),
@@ -89,7 +107,7 @@ def _serialize_product(stream_id: str, stream_path: str, index_url: str, product
         label=meta.get("label"),
         kflavor=meta.get("kflavor"),
         krel=meta.get("krel"),
-        **({"build_id": version_info[0]} if version_info else {}),
+        build_id=latest_version_key,
     )
 
 
